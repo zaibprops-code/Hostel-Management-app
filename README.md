@@ -41,6 +41,12 @@ Monorepo managed with npm workspaces: [`server/`](server) (API) and [`web/`](web
 
 ---
 
+## 📱 Android app (APK)
+
+The app also ships as a **native Android APK** (via Capacitor). A GitHub Action builds it
+automatically — no build machine needed — and one APK works for any deployment (it asks for
+your server address on first launch). See **[MOBILE.md](MOBILE.md)**.
+
 ## 🌐 Deploy online (get a shareable link)
 
 To put the app on the internet with a real URL anyone can open (phone or laptop), follow

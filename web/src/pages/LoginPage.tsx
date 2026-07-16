@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { apiError } from "../lib/api";
+import { apiError, isNativeApp, needsServerConfig, getApiBase, setApiBase, clearApiBase } from "../lib/api";
 import { Button, Input, ErrorText } from "../components/ui";
 
 const DEMO = [
@@ -19,9 +19,29 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Server-address configuration (mobile / self-hosted).
+  const [showServer, setShowServer] = useState(needsServerConfig());
+  const [serverInput, setServerInput] = useState(() => {
+    const base = getApiBase();
+    return base === "/api" ? "" : base.replace(/\/api$/, "");
+  });
+
+  function saveServer(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (serverInput.trim()) setApiBase(serverInput);
+    else clearApiBase();
+    setShowServer(false);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (needsServerConfig()) {
+      setShowServer(true);
+      setError("Please set your hostel server address first.");
+      return;
+    }
     setLoading(true);
     try {
       await login(email, password);
@@ -69,14 +89,39 @@ export default function LoginPage() {
           <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
           <p className="text-sm text-slate-500 mt-1 mb-6">Sign in to your management account.</p>
 
-          <form onSubmit={submit} className="space-y-4">
-            <Input label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-            <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            <ErrorText>{error}</ErrorText>
-            <Button type="submit" loading={loading} className="w-full">Sign in</Button>
-          </form>
+          {showServer ? (
+            <form onSubmit={saveServer} className="space-y-4">
+              <div>
+                <span className="label">Hostel server address</span>
+                <input
+                  className="input"
+                  placeholder="e.g. hostel-api.onrender.com"
+                  value={serverInput}
+                  onChange={(e) => setServerInput(e.target.value)}
+                  autoFocus
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Enter the web address of your hostel's backend server (given to you by your admin).
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">Save & continue</Button>
+                {!needsServerConfig() && <Button type="button" variant="secondary" onClick={() => setShowServer(false)}>Cancel</Button>}
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={submit} className="space-y-4">
+              <Input label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+              <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <ErrorText>{error}</ErrorText>
+              <Button type="submit" loading={loading} className="w-full">Sign in</Button>
+            </form>
+          )}
 
-          <div className="mt-3 text-right">
+          <div className="mt-3 flex items-center justify-between">
+            <button type="button" onClick={() => setShowServer((s) => !s)} className="text-xs text-slate-400 hover:text-brand-600">
+              {isNativeApp() ? "⚙ Server settings" : getApiBase() === "/api" ? "" : "⚙ Change server"}
+            </button>
             <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline">Forgot password?</Link>
           </div>
 
