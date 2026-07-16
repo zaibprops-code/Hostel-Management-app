@@ -1,0 +1,54 @@
+# Render Blueprint — deploys the whole app (API + web) from this repo.
+# In Render: New + → Blueprint → connect this repository. Render reads this file
+# and creates both services. You only need to paste ONE value: DATABASE_URL
+# (from Supabase). Everything else is wired automatically.
+
+services:
+  # ---- Backend API (Node/Express) --------------------------------------
+  - type: web
+    name: hostel-api
+    runtime: node
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /api/health
+    # --include=dev keeps build tools (tsc, prisma, tsx) available in prod install.
+    # db:push creates the tables; db:seed only runs on an empty DB (safe on redeploys).
+    buildCommand: npm install --include=dev && npm --workspace server run db:push && npm --workspace server run build && npm --workspace server run db:seed
+    startCommand: npm --workspace server run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL       # ← paste your Supabase connection string here (Render dashboard)
+        sync: false
+      - key: JWT_ACCESS_SECRET  # auto-generated strong secret
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES
+        value: 7d
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: MAX_UPLOAD_MB
+        value: "10"
+
+  # ---- Frontend (static React build) -----------------------------------
+  - type: web
+    name: hostel-web
+    runtime: static
+    autoDeploy: true
+    buildCommand: npm install --include=dev && npm --workspace web run build
+    staticPublishPath: web/dist
+    envVars:
+      # Auto-wired to the API service's hostname at build time.
+      - key: VITE_API_HOST
+        fromService:
+          type: web
+          name: hostel-api
+          property: host
+    routes:
+      # SPA fallback so client-side routes (e.g. /residents) work on refresh.
+      - type: rewrite
+        source: /*
+        destination: /index.html

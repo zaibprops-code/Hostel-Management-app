@@ -7,6 +7,13 @@ const rand = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 async function main() {
+  // Safety guard: never wipe an existing (e.g. production) database on redeploy.
+  // The seed only runs on an empty database. Use FORCE_SEED=1 to override in dev.
+  if (!process.env.FORCE_SEED && (await prisma.company.count()) > 0) {
+    console.log("ℹ️  Database already has data — skipping seed. Set FORCE_SEED=1 to reseed.");
+    return;
+  }
+
   console.log("🌱 Seeding database...");
 
   // Clean slate (dev only)

@@ -41,7 +41,14 @@ Monorepo managed with npm workspaces: [`server/`](server) (API) and [`web/`](web
 
 ---
 
-## 🚀 Getting Started
+## 🌐 Deploy online (get a shareable link)
+
+To put the app on the internet with a real URL anyone can open (phone or laptop), follow
+**[DEPLOYMENT.md](DEPLOYMENT.md)** — a ~15-minute, click-by-click guide using free
+**Supabase** (database) + **Render** (API & website). A `render.yaml` blueprint and
+`vercel.json` are included so most of it is automatic.
+
+## 🚀 Getting Started (run locally)
 
 ### Prerequisites
 - Node.js 20+

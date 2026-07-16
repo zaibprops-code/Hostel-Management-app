@@ -31,7 +31,29 @@ export function createApp() {
   const app = express();
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-  app.use(cors({ origin: env.corsOrigin.split(","), credentials: true }));
+
+  // Allow the configured frontend origin(s). Entries may be full origins
+  // ("https://app.example.com") or bare hosts ("app.example.com") so the value
+  // can be auto-wired from a hosting platform without a protocol prefix.
+  const allowedOrigins = env.corsOrigin.split(",").map((s) => s.trim()).filter(Boolean);
+  const allowAll = allowedOrigins.includes("*");
+  function isAllowedOrigin(origin?: string): boolean {
+    if (!origin) return true; // same-origin / server-to-server / curl
+    const bare = origin.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return allowedOrigins.some((a) => {
+      const ab = a.replace(/^https?:\/\//, "").replace(/\/$/, "");
+      return origin === a || bare === ab;
+    });
+  }
+  // Auth is Bearer-token based (no cookies), so reflecting any origin with
+  // credentials disabled is safe when CORS_ORIGIN is "*".
+  app.use(
+    cors(
+      allowAll
+        ? { origin: true, credentials: false }
+        : { origin: (origin, cb) => cb(null, isAllowedOrigin(origin)), credentials: true }
+    )
+  );
   app.use(express.json({ limit: "2mb" }));
   app.use(morgan(env.nodeEnv === "development" ? "dev" : "combined"));
 

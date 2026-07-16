@@ -20,7 +20,22 @@ export const tokenStore = {
   },
 };
 
-export const api = axios.create({ baseURL: "/api" });
+// Resolve where the API lives. In local dev this stays "/api" (Vite proxies it).
+// In production the frontend and backend are on different hosts, so we read the
+// API location from build-time env vars:
+//   VITE_API_URL  – full base, e.g. https://hostel-api.onrender.com/api
+//   VITE_API_HOST – host only,  e.g. hostel-api.onrender.com  (→ https://…/api)
+function resolveApiBase(): string {
+  const url = import.meta.env.VITE_API_URL as string | undefined;
+  const host = import.meta.env.VITE_API_HOST as string | undefined;
+  if (url) return url.replace(/\/$/, "");
+  if (host) return `https://${host.replace(/^https?:\/\//, "").replace(/\/$/, "")}/api`;
+  return "/api";
+}
+
+export const API_BASE = resolveApiBase();
+
+export const api = axios.create({ baseURL: API_BASE });
 
 api.interceptors.request.use((config) => {
   const token = tokenStore.access;
@@ -39,7 +54,7 @@ api.interceptors.response.use(
       try {
         if (!refreshing) {
           refreshing = axios
-            .post("/api/auth/refresh", { refreshToken: tokenStore.refresh })
+            .post(`${API_BASE}/auth/refresh`, { refreshToken: tokenStore.refresh })
             .then((r) => {
               tokenStore.set(r.data.accessToken, r.data.refreshToken);
               return r.data.accessToken as string;
