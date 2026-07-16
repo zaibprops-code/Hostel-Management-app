@@ -1,7 +1,13 @@
-# Render Blueprint — deploys the whole app (API + web) from this repo.
-# In Render: New + → Blueprint → connect this repository. Render reads this file
-# and creates both services. You only need to paste ONE value: DATABASE_URL
-# (from Supabase). Everything else is wired automatically.
+# Render Blueprint — deploys EVERYTHING (database + backend + website) from this
+# repo with one click and no values to paste. In Render, use the
+# "Deploy to Render" button in the README (or New + → Blueprint → this repo).
+
+databases:
+  # Managed PostgreSQL database, auto-created and auto-connected to the API.
+  - name: hostel-db
+    databaseName: hostel
+    user: hostel
+    plan: free
 
 services:
   # ---- Backend API (Node/Express) --------------------------------------
@@ -12,15 +18,17 @@ services:
     autoDeploy: true
     healthCheckPath: /api/health
     # --include=dev keeps build tools (tsc, prisma, tsx) available in prod install.
-    # db:push creates the tables; db:seed only runs on an empty DB (safe on redeploys).
+    # db:push creates tables; db:seed only runs on an empty DB (safe on redeploys).
     buildCommand: npm install --include=dev && npm --workspace server run db:push && npm --workspace server run build && npm --workspace server run db:seed
     startCommand: npm --workspace server run start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL       # ← paste your Supabase connection string here (Render dashboard)
-        sync: false
-      - key: JWT_ACCESS_SECRET  # auto-generated strong secret
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hostel-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
@@ -33,7 +41,7 @@ services:
       - key: MAX_UPLOAD_MB
         value: "10"
 
-  # ---- Frontend (static React build) -----------------------------------
+  # ---- Frontend website (static React build) ---------------------------
   - type: web
     name: hostel-web
     runtime: static
@@ -41,14 +49,13 @@ services:
     buildCommand: npm install --include=dev && npm --workspace web run build
     staticPublishPath: web/dist
     envVars:
-      # Auto-wired to the API service's hostname at build time.
+      # Auto-wired to the API service's address at build time.
       - key: VITE_API_HOST
         fromService:
           type: web
           name: hostel-api
           property: host
     routes:
-      # SPA fallback so client-side routes (e.g. /residents) work on refresh.
       - type: rewrite
         source: /*
         destination: /index.html

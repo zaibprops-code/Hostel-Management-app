@@ -1,54 +1,32 @@
-# 🚀 Deploy the app online (get a real link)
+# 🌐 Put the app online (plain-English guide)
 
-This guide takes you from "code on GitHub" to a **live URL anyone can open** on any
-phone or laptop. It uses two free services:
+This gets your app onto the internet with a real web link **and** a working backend that
+the phone app connects to. It uses **one free account (Render)** which hosts the database,
+the backend, and the website together — all set up automatically. **You don't copy or paste
+any technical values.**
 
-- **Supabase** → your database (PostgreSQL)
-- **Render** → hosts *both* the backend API and the website, using the included
-  `render.yaml` blueprint so most of the setup is automatic
-
-Total time: ~15–20 minutes. No coding required — just clicking and pasting one value.
-
-> Prefer **Vercel** for the website? See [Alternative: Vercel](#alternative-use-vercel-for-the-frontend) at the bottom.
+Time: ~10 minutes, mostly waiting.
 
 ---
 
-## Step 1 — Create the database (Supabase)
+## Step 1 — Make a Render account
+1. Go to **https://render.com**.
+2. Click **Get Started** → **Sign in with GitHub** (use the same GitHub account that has
+   your `Hostel-Management-app` code). Approve access when asked.
 
-1. Go to **https://supabase.com** → sign in with GitHub → **New project**.
-2. Give it a name (e.g. `hostel`), set a **database password** (save it somewhere), pick the
-   region closest to Pakistan (e.g. *Singapore* or *Frankfurt*), and click **Create**.
-3. Wait ~2 minutes for it to finish provisioning.
-4. Click **Connect** (top of the page) → choose the **ORM / Prisma** or **Direct connection**
-   tab → copy the **connection string**. It looks like:
-   ```
-   postgresql://postgres:[YOUR-PASSWORD]@db.abcdxyz.supabase.co:5432/postgres
-   ```
-5. Replace `[YOUR-PASSWORD]` with the database password you set in step 2.
-   Keep this final string handy — you'll paste it into Render in Step 2.
+## Step 2 — Deploy with one click
+1. In the project's **README on GitHub**, click the **"Deploy to Render"** button.
+   *(Or in Render: click **New +** → **Blueprint** → pick your `Hostel-Management-app` repo.)*
+2. Render reads the setup file and shows what it will create:
+   a **database**, the **backend** (`hostel-api`), and the **website** (`hostel-web`).
+3. Click **Apply** / **Create**. That's it — Render now builds everything automatically
+   (first build takes ~5 minutes). No values to enter.
 
-> Use the **direct connection** (port **5432**), not the pooled one — the app needs it to
-> create its tables on first deploy.
-
----
-
-## Step 2 — Deploy everything (Render)
-
-1. Go to **https://render.com** → sign in with GitHub.
-2. Click **New +** → **Blueprint**.
-3. Select your **`Hostel-Management-app`** repository and click **Connect / Apply**.
-4. Render reads the `render.yaml` file and shows two services it will create:
-   **`hostel-api`** (backend) and **`hostel-web`** (website). Approve it.
-5. It will ask you to fill in the one value marked *"sync: false"* — **`DATABASE_URL`**.
-   Paste the Supabase connection string from Step 1. Click **Apply / Create**.
-6. Render now builds both services (first build takes ~3–5 minutes). It automatically:
-   - creates all database tables,
-   - loads demo data so you can log in immediately,
-   - generates secure login secrets,
-   - connects the website to the API.
-
-When it finishes, open the **`hostel-web`** service in Render — its URL (e.g.
-`https://hostel-web.onrender.com`) is **your live app**. 🎉
+## Step 3 — Open your app
+- When it's done, open the **`hostel-web`** service in Render — its link
+  (like `https://hostel-web.onrender.com`) is **your live website**. Open it on any device.
+- The backend link is the **`hostel-api`** service (like `https://hostel-api.onrender.com`).
+  **You'll type this one into the phone app** on first launch (see `MOBILE.md`).
 
 ### Log in
 | Role | Email | Password |
@@ -59,64 +37,30 @@ When it finishes, open the **`hostel-web`** service in Render — its URL (e.g.
 
 ---
 
-## Step 3 — Make it yours (important before real use)
-
-The demo data and passwords are just to show it works. Before you run your real hostel on it:
-
-1. **Log in as Owner** → **Settings** → change your password.
-2. Go to **Users** and change (or remove) the other demo accounts, and create real accounts
-   for your managers/staff with proper hostel access.
-3. Delete the demo hostels/residents and add your own via **Hostels** → **Rooms & Beds** →
-   **Residents** → **Admissions**.
-
-> Want to start with a completely empty database instead of demo data? In Supabase → **Table
-> Editor**, or tell me and I'll add a one-command "create just my owner account" script.
+## Step 4 — Make it yours (before real use)
+1. Log in as **Owner** → **Settings** → change your password.
+2. Go to **Users** → change/remove the demo accounts and add real ones for your staff.
+3. Remove the demo hostels/residents and add your own (Hostels → Rooms & Beds → Residents →
+   Admissions). *Or ask me to switch it to "start empty" so there's no demo data at all.*
 
 ---
 
-## How the pieces fit together
+## Good to know (honest notes on cost)
 
-```
-   Your browser / phone
-          │
-          ▼
-  hostel-web  (Render static site)  ──calls──►  hostel-api  (Render web service)
-   your live URL                                        │
-                                                        ▼
-                                              Supabase PostgreSQL
-```
-
-- Push a change to GitHub → Render **auto-redeploys** both services. Your data is safe:
-  the seed only runs on an empty database, so redeploys never wipe real data.
-- The **free** Render API "sleeps" after 15 minutes of no use and takes ~30 seconds to wake
-  on the next visit. Upgrading the `hostel-api` service to a paid instance (~$7/mo) keeps it
-  always-on. The website itself is always fast.
+- **Free is for trying it.** On Render's free plan:
+  - the backend **"sleeps" after 15 minutes** of no use and takes ~30 seconds to wake up on
+    the next visit;
+  - the **free database is time-limited** (Render deletes free databases after their free
+    window). **To run this for your real business, upgrade the database and backend to a paid
+    plan (about $7–14/month total).** That keeps it always-on and your data permanent.
+- Prefer a **longer-lasting free database**? I can switch the setup to use **Supabase** (free
+  database that doesn't expire) instead — just ask. It adds one small copy-paste step.
 
 ---
 
-## Troubleshooting
-
-| Symptom | Fix |
-|--------|-----|
-| Build fails on "Can't reach database" | Check `DATABASE_URL` in the `hostel-api` service → **Environment**. Make sure the password is correct and you used the **direct** (5432) Supabase string. |
-| Website loads but login says "Network error" | Open the `hostel-api` URL + `/api/health` in a browser — it should show `{"status":"ok"}`. If it's asleep, wait 30s and retry. |
-| Blank page after deploy | Confirm `hostel-web` finished building and its **Publish directory** is `web/dist`. |
-| Want to reset demo data | Set env var `FORCE_SEED=1` on `hostel-api`, redeploy once, then remove it. (This wipes and reloads demo data.) |
-
----
-
-## Alternative: use Vercel for the frontend
-
-If you'd rather host the website on **Vercel** (and keep the API on Render):
-
-1. Deploy only the **API** on Render (or Railway): use the `hostel-api` part — set
-   `DATABASE_URL` and note its URL, e.g. `https://hostel-api.onrender.com`.
-2. On **https://vercel.com** → **Add New → Project** → import the repo.
-   The included `vercel.json` sets the build automatically.
-3. In Vercel → **Settings → Environment Variables**, add:
-   ```
-   VITE_API_URL = https://hostel-api.onrender.com/api
-   ```
-4. **Deploy**. Vercel gives you a `your-app.vercel.app` link.
-
-That's it — same app, website on Vercel instead of Render.
+## If something looks wrong
+| What you see | What to do |
+|--------------|-----------|
+| Website loads but login fails with "Network error" | The backend may be asleep — wait ~30s and try again. Or open the `hostel-api` link + `/api/health`; it should say `{"status":"ok"}`. |
+| A build shows "failed" in Render | Open it → **Logs**, copy the red lines, and send them to me — I'll fix it. |
+| Want to wipe demo data and reload it | On `hostel-api` → **Environment**, add `FORCE_SEED` = `1`, redeploy once, then remove it. |

@@ -49,10 +49,11 @@ your server address on first launch). See **[MOBILE.md](MOBILE.md)**.
 
 ## 🌐 Deploy online (get a shareable link)
 
-To put the app on the internet with a real URL anyone can open (phone or laptop), follow
-**[DEPLOYMENT.md](DEPLOYMENT.md)** — a ~15-minute, click-by-click guide using free
-**Supabase** (database) + **Render** (API & website). A `render.yaml` blueprint and
-`vercel.json` are included so most of it is automatic.
+One click deploys the database, backend and website together (no values to paste):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/zaibprops-code/Hostel-Management-app)
+
+Then follow the short, plain-English steps in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ## 🚀 Getting Started (run locally)
 
