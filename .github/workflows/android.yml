@@ -61,7 +61,11 @@ jobs:
           path: web/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
+      # Optional: publishes a public download link. Needs the repo's Actions
+      # "Workflow permissions" set to "Read and write". If it can't, the APK is
+      # still available above as a build artifact, so we don't fail the build.
       - name: Publish to "latest" release (public download link)
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
