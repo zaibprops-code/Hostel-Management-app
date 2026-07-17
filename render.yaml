@@ -51,12 +51,9 @@ services:
     buildCommand: npm install --include=dev && npm --workspace web run build
     staticPublishPath: web/dist
     envVars:
-      # Auto-wired to the API service's address at build time.
+      # The frontend is built to talk to this backend address.
       - key: VITE_API_HOST
-        fromService:
-          type: web
-          name: hostel-api
-          property: host
+        value: hostel-api-3fu5.onrender.com
     routes:
       - type: rewrite
         source: /*
