@@ -98,6 +98,30 @@ turned off; the app runs fine without it.)*
 
 ---
 
+## 🔄 Start completely over (forgot your login / want a clean slate)
+
+If you can't get back in — you've forgotten your owner email **and** password — or you just
+want to wipe everything and set up fresh, you can reset the whole app to its "brand new"
+state. After this, the next time you open the app it shows **"Set up your business"** again,
+and you create a new owner account from scratch.
+
+> ⚠️ This **erases everything** — all hostels, residents, payments, staff and users. Only do
+> it when you're sure (e.g. before you've entered real data, or you truly want to start over).
+
+1. In **Render**, open the **`hostel-api`** service → **Environment**.
+2. Add a new variable: key `RESET_DATA`, value `reset-1` (any short word works).
+3. Click **Save** — the service redeploys, and on start-up it wipes the data.
+4. Open your app → you'll see **"Set up your business"** → create your new owner account.
+5. **Important:** go back to Render → **Environment** → **delete the `RESET_DATA` variable**
+   (tidy-up). *You don't have to rush — it's built to run only once, so it will not wipe your
+   new data on the next redeploy. If you ever want to reset again later, change the value to a
+   new word like `reset-2`.*
+
+That's your safety net: even if you forget your owner login, you're never permanently locked
+out — you can always start fresh from your own Render dashboard, which only you control.
+
+---
+
 ## If something looks wrong
 | What you see | What to do |
 |--------------|-----------|

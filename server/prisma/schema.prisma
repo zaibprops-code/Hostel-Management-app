@@ -241,6 +241,15 @@ model Company {
   users   User[]
 }
 
+// Small key/value store for app-level state that must survive restarts and is
+// not tied to any business. Used e.g. to remember that a one-time data reset
+// token has already been consumed, so a redeploy can't wipe data twice.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model User {
   id           String   @id @default(cuid())
   companyId    String

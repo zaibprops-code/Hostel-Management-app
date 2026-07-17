@@ -22,6 +22,12 @@ export const env = {
   },
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
   uploadDir: process.env.UPLOAD_DIR ?? "uploads",
+  // Optional one-time "wipe everything and start fresh" switch. Set RESET_DATA
+  // to any non-empty value in the environment to erase all data on the next
+  // start-up (so the app returns to first-run setup). It runs at most once per
+  // distinct value, so leaving it set does NOT wipe data again on later
+  // redeploys — but you should still remove it afterwards. See DEPLOYMENT.md.
+  resetDataToken: process.env.RESET_DATA ?? "",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
   // Public address of the web app, used to build links in emails (e.g. the
   // password-reset link). Falls back to the CORS origin, then localhost.
