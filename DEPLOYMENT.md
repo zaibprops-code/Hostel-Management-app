@@ -98,7 +98,28 @@ turned off; the app runs fine without it.)*
 
 ---
 
+## 👥 Multiple hostel owners (self-service sign-up)
+
+The app is **multi-tenant**: any number of hostel owners can use the same website/app, and
+each one gets their own **completely private space** — one owner can never see another
+owner's hostels, residents or money.
+
+- **New owner signs up themselves:** on the login screen they tap **"Create a business
+  account"**, enter their business name, name, email and a password, and they're in — no
+  action needed from you. This is also the easiest way to **start fresh yourself**: just
+  create a new business account with a new email.
+- **Want to keep it private to you?** In Render → `hostel-api` → **Environment**, set
+  `ALLOW_SIGNUP` to `false`. Then the "Create a business account" option disappears and only
+  existing owners can sign in. (You can turn it back on anytime.)
+
+---
+
 ## 🔄 Start completely over (forgot your login / want a clean slate)
+
+> **Easiest option now:** since anyone can self-register, if you're locked out you can simply
+> tap **"Create a business account"** on the login screen and start a brand-new business with
+> a new email — no server access needed. The steps below are only for when you want to
+> *erase the old data entirely*.
 
 If you can't get back in — you've forgotten your owner email **and** password — or you just
 want to wipe everything and set up fresh, you can reset the whole app to its "brand new"

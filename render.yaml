@@ -42,6 +42,11 @@ services:
         value: "*"
       - key: MAX_UPLOAD_MB
         value: "10"
+      # Let new hostel owners self-register their own business from the login
+      # screen (multi-tenant). Set to "false" to lock the app to existing
+      # businesses only. The very first business can always be created.
+      - key: ALLOW_SIGNUP
+        value: "true"
       # Public website address — used to build the link inside reset emails.
       - key: WEB_APP_URL
         value: https://hostel-web-us71.onrender.com

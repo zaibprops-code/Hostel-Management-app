@@ -1,19 +1,20 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, conflict } from "../lib/http";
 import { validateBody } from "../middleware/validate";
-import { audit } from "../lib/audit";
+import { createBusinessAccount } from "../lib/accounts";
+import { env } from "../lib/env";
 
 const router = Router();
 
-// GET /api/setup/status — tells the app whether first-time setup is needed.
+// GET /api/setup/status — tells the app whether first-time setup is needed
+// (the whole server has no accounts yet) and whether new owners may self-register.
 router.get(
   "/status",
   asyncHandler(async (_req, res) => {
     const users = await prisma.user.count();
-    res.json({ needsSetup: users === 0 });
+    res.json({ needsSetup: users === 0, allowSignup: env.allowSignup });
   })
 );
 
@@ -24,8 +25,9 @@ const setupSchema = z.object({
   password: z.string().min(8),
 });
 
-// POST /api/setup — first-run: create the business + the owner account.
-// Only works when no users exist yet, so it can never be abused later.
+// POST /api/setup — first-run: create the very first business + owner account.
+// Only works when no users exist yet. Self-service sign-up for additional
+// businesses goes through POST /api/auth/register instead.
 router.post(
   "/",
   validateBody(setupSchema),
@@ -34,16 +36,7 @@ router.post(
     if (existing > 0) throw conflict("Setup has already been completed");
 
     const { companyName, name, email, password } = req.body as z.infer<typeof setupSchema>;
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const owner = await prisma.$transaction(async (tx) => {
-      const company = await tx.company.create({ data: { name: companyName, currency: "PKR" } });
-      return tx.user.create({
-        data: { companyId: company.id, name, email, passwordHash, role: "OWNER" },
-      });
-    });
-
-    await audit({ userId: owner.id, action: "setup.complete", entity: "User", entityId: owner.id });
+    await createBusinessAccount({ companyName, name, email, password });
     res.status(201).json({ success: true });
   })
 );

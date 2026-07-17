@@ -28,6 +28,11 @@ export const env = {
   // distinct value, so leaving it set does NOT wipe data again on later
   // redeploys — but you should still remove it afterwards. See DEPLOYMENT.md.
   resetDataToken: process.env.RESET_DATA ?? "",
+  // Whether new hostel owners may self-register their own business account from
+  // the login screen (multi-tenant SaaS mode). Defaults to on; set
+  // ALLOW_SIGNUP=false to lock the app to the existing businesses only. The very
+  // first business can always be created, even when sign-ups are disabled.
+  allowSignup: process.env.ALLOW_SIGNUP !== "false",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
   // Public address of the web app, used to build links in emails (e.g. the
   // password-reset link). Falls back to the CORS origin, then localhost.

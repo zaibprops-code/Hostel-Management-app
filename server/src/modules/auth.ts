@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, badRequest, unauthorized } from "../lib/http";
+import { asyncHandler, badRequest, forbidden, unauthorized } from "../lib/http";
+import { createBusinessAccount } from "../lib/accounts";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../lib/jwt";
 import { effectivePermissions } from "../lib/permissions";
 import { validateBody } from "../middleware/validate";
@@ -51,6 +52,35 @@ async function buildSession(userId: string) {
     },
   };
 }
+
+// POST /api/auth/register — self-service sign-up: creates a new business
+// (company + owner). Public, but rate-limited and optionally disabled via
+// ALLOW_SIGNUP. The first business can always be created (bootstrap).
+router.post(
+  "/register",
+  validateBody(
+    z.object({
+      companyName: z.string().trim().min(1),
+      name: z.string().trim().min(1),
+      email: z.string().trim().toLowerCase().email(),
+      password: z.string().min(8),
+    })
+  ),
+  asyncHandler(async (req, res) => {
+    if (!env.allowSignup) {
+      const userCount = await prisma.user.count();
+      if (userCount > 0) throw forbidden("New sign-ups are currently disabled on this server.");
+    }
+    const { companyName, name, email, password } = req.body as {
+      companyName: string;
+      name: string;
+      email: string;
+      password: string;
+    };
+    await createBusinessAccount({ companyName, name, email, password });
+    res.status(201).json({ success: true });
+  })
+);
 
 // POST /api/auth/login
 router.post(

@@ -13,6 +13,10 @@ export default function LoginPage() {
   const [view, setView] = useState<View>("loading");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Whether new owners may self-register, and whether this is the very first
+  // business on a brand-new server (changes the sign-up screen's wording).
+  const [allowSignup, setAllowSignup] = useState(true);
+  const [isFirstRun, setIsFirstRun] = useState(false);
 
   // Login fields
   const [email, setEmail] = useState("");
@@ -38,6 +42,8 @@ export default function LoginPage() {
     }
     try {
       const { data } = await api.get("/setup/status");
+      setAllowSignup(data.allowSignup ?? true);
+      setIsFirstRun(Boolean(data.needsSetup));
       setView(data.needsSetup ? "onboarding" : "login");
     } catch {
       // If we cannot reach the server, fall back to the login screen.
@@ -78,7 +84,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await api.post("/setup", { companyName, name: ownerName, email: ownerEmail, password: ownerPassword });
+      await api.post("/auth/register", { companyName, name: ownerName, email: ownerEmail, password: ownerPassword });
       await login(ownerEmail, ownerPassword);
       await refresh();
       navigate("/");
@@ -143,12 +149,16 @@ export default function LoginPage() {
             </form>
           )}
 
-          {/* First-run: create the business + owner account */}
+          {/* Create a business account (first-run OR self-service sign-up) */}
           {view === "onboarding" && (
             <form onSubmit={submitSetup} className="space-y-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Welcome! Let's set up your business</h2>
-                <p className="text-sm text-slate-500 mt-1">Create your owner account. This is a one-time step.</p>
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {isFirstRun ? "Welcome! Let's set up your business" : "Create your business account"}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Set up your hostel business and its owner login. You'll get your own private space.
+                </p>
               </div>
               <Input label="Business name" placeholder="e.g. Khan Hostels" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required autoFocus />
               <Input label="Your full name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required />
@@ -157,9 +167,14 @@ export default function LoginPage() {
               <p className="text-xs text-slate-400">Use at least 8 characters. Keep it safe — this is your owner login.</p>
               <ErrorText>{error}</ErrorText>
               <Button type="submit" loading={loading} className="w-full">Create my account</Button>
-              {isNativeApp() && (
-                <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600 w-full text-center">⚙ Change server</button>
-              )}
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => { setError(""); setView("login"); }} className="text-sm text-brand-600 hover:underline">
+                  ← Already have an account? Sign in
+                </button>
+                {isNativeApp() && (
+                  <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600">⚙ Change server</button>
+                )}
+              </div>
             </form>
           )}
 
@@ -180,6 +195,14 @@ export default function LoginPage() {
                 ) : <span />}
                 <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline">Forgot password?</Link>
               </div>
+              {allowSignup && (
+                <p className="mt-6 pt-4 border-t border-slate-100 text-center text-sm text-slate-500">
+                  New here?{" "}
+                  <button type="button" onClick={() => { setError(""); setView("onboarding"); }} className="text-brand-600 font-medium hover:underline">
+                    Create a business account
+                  </button>
+                </p>
+              )}
             </>
           )}
         </div>
