@@ -31,14 +31,9 @@ export default function ForgotPasswordPage() {
         {sent ? (
           <div className="space-y-4">
             <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{sent.message}</p>
-            {sent.devResetToken && (
-              <div className="text-xs bg-slate-100 rounded-lg p-3">
-                <p className="font-semibold text-slate-600 mb-1">Dev reset token:</p>
-                <Link to={`/reset-password?token=${sent.devResetToken}`} className="text-brand-600 break-all hover:underline">
-                  Continue to reset →
-                </Link>
-              </div>
-            )}
+            <p className="text-xs text-slate-500">
+              If you're a staff member, your hostel owner can also reset your password for you from the Users page.
+            </p>
             <Link to="/login" className="text-sm text-brand-600 hover:underline block">← Back to login</Link>
           </div>
         ) : (

@@ -20,9 +20,9 @@ services:
     # --include=dev keeps build tools (tsc, prisma, tsx) available in prod install.
     # Build only generates the client + compiles (no DB access needed here).
     buildCommand: npm install --include=dev && npm --workspace server run db:generate && npm --workspace server run build
-    # Creating tables + seeding happens at start-up, when the DB is reachable.
-    # db:push is idempotent; db:seed only runs on an empty DB (safe on restarts).
-    startCommand: npm --workspace server run db:push && npm --workspace server run db:seed && npm --workspace server run start
+    # Create/patch tables at start-up (idempotent). No demo data is loaded — the
+    # app starts empty and asks the owner to set up their business on first visit.
+    startCommand: npm --workspace server run db:push && npm --workspace server run start
     envVars:
       - key: NODE_ENV
         value: production

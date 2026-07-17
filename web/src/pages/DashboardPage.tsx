@@ -36,6 +36,39 @@ export default function DashboardPage() {
   if (loading) return <PageLoader />;
   if (!data || !k) return <EmptyState title="No data yet" />;
 
+  // Brand-new account with no hostels yet — show a friendly getting-started guide.
+  if (can("hostels.manage") && k.totalHostels === 0) {
+    return (
+      <div>
+        <PageHeader title={`Welcome, ${user?.name.split(" ")[0]}! 👋`} subtitle="Let's get your hostel set up. Follow these steps in order." />
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            { n: 1, to: "/hostels", title: "Add your hostel", desc: "Create your first hostel branch — name, address and monthly building rent.", icon: <IconHostel />, cta: "Go to Hostels" },
+            { n: 2, to: "/rooms", title: "Add rooms & beds", desc: "Set up the floors, rooms and beds so you can assign residents to them.", icon: <IconBed />, cta: "Go to Rooms & Beds" },
+            { n: 3, to: "/residents", title: "Add residents", desc: "Create resident profiles for the people staying at your hostel.", icon: <IconResidents />, cta: "Go to Residents" },
+            { n: 4, to: "/admissions", title: "Admit & collect rent", desc: "Assign a resident to a bed, set their rent and record their first payment.", icon: <IconMoney />, cta: "Go to Admissions" },
+          ].map((s) => (
+            <Card key={s.n} className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-brand-600 text-white grid place-items-center font-bold">{s.n}</div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">{s.icon} {s.title}</h3>
+                  <p className="text-sm text-slate-500 mt-1">{s.desc}</p>
+                  <Link to={s.to} className="btn-primary mt-3 inline-flex text-sm">{s.cta} →</Link>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+        <Card className="p-5 mt-4 bg-brand-50 border-brand-100">
+          <p className="text-sm text-brand-800">
+            💡 <b>Tip:</b> When you hire a manager, go to <Link to="/users" className="underline font-medium">Users</Link> to create their login and give them access to a hostel. They'll only see their hostel — you see everything.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader

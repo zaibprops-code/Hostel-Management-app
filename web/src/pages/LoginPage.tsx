@@ -1,50 +1,86 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { apiError, isNativeApp, needsServerConfig, getApiBase, setApiBase, clearApiBase } from "../lib/api";
-import { Button, Input, ErrorText } from "../components/ui";
+import { api, apiError, isNativeApp, needsServerConfig, getApiBase, setApiBase, clearApiBase } from "../lib/api";
+import { Button, Input, ErrorText, Spinner } from "../components/ui";
 
-const DEMO = [
-  { role: "Owner", email: "owner@xyzhostel.com" },
-  { role: "Manager", email: "manager@xyzhostel.com" },
-  { role: "Accountant", email: "accountant@xyzhostel.com" },
-  { role: "Kitchen", email: "kitchen@xyzhostel.com" },
-];
+type View = "loading" | "server" | "onboarding" | "login";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, refresh } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("owner@xyzhostel.com");
-  const [password, setPassword] = useState("Password123");
+
+  const [view, setView] = useState<View>("loading");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Server-address configuration (mobile / self-hosted).
-  const [showServer, setShowServer] = useState(needsServerConfig());
+  // Login fields
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // First-run setup fields
+  const [companyName, setCompanyName] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+
+  // Server address (phone app only)
   const [serverInput, setServerInput] = useState(() => {
     const base = getApiBase();
     return base === "/api" ? "" : base.replace(/\/api$/, "");
   });
+
+  // Decide which screen to show.
+  async function resolveView() {
+    if (needsServerConfig()) {
+      setView("server");
+      return;
+    }
+    try {
+      const { data } = await api.get("/setup/status");
+      setView(data.needsSetup ? "onboarding" : "login");
+    } catch {
+      // If we cannot reach the server, fall back to the login screen.
+      setView("login");
+    }
+  }
+
+  useEffect(() => {
+    resolveView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function saveServer(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (serverInput.trim()) setApiBase(serverInput);
     else clearApiBase();
-    setShowServer(false);
+    setView("loading");
+    resolveView();
   }
 
-  async function submit(e: React.FormEvent) {
+  async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (needsServerConfig()) {
-      setShowServer(true);
-      setError("Please set your hostel server address first.");
-      return;
-    }
     setLoading(true);
     try {
       await login(email, password);
+      navigate("/");
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitSetup(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await api.post("/setup", { companyName, name: ownerName, email: ownerEmail, password: ownerPassword });
+      await login(ownerEmail, ownerPassword);
+      await refresh();
       navigate("/");
     } catch (err) {
       setError(apiError(err));
@@ -59,13 +95,13 @@ export default function LoginPage() {
       <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-brand-700 via-brand-800 to-slate-900 p-12 text-white">
         <div className="flex items-center gap-3">
           <span className="text-4xl">🏨</span>
-          <span className="text-xl font-bold">XYZ Hostel Group</span>
+          <span className="text-xl font-bold">Hostel Manager</span>
         </div>
         <div>
           <h1 className="text-4xl font-extrabold leading-tight">Run your entire hostel business from one platform.</h1>
           <p className="mt-4 text-brand-100 max-w-md">
-            Residents, rooms & beds, rent collection, expenses, food, staff and full financials — across every branch,
-            in real time.
+            Residents, rooms &amp; beds, rent collection, expenses, food, staff and full financials — across every
+            branch, in real time.
           </p>
           <div className="mt-8 grid grid-cols-3 gap-4 max-w-md">
             {[["Multi-branch", "Hostels"], ["Rent & deposits", "Finance"], ["Role-based", "Access control"]].map(([a, b]) => (
@@ -76,70 +112,76 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-        <p className="text-xs text-brand-200">© {new Date().getFullYear()} XYZ Hostel Group. Islamabad · Rawalpindi</p>
+        <p className="text-xs text-brand-200">© {new Date().getFullYear()} Hostel Manager</p>
       </div>
 
-      {/* Form */}
+      {/* Right side */}
       <div className="flex items-center justify-center p-6 bg-slate-50">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8">
             <span className="text-3xl">🏨</span>
-            <span className="text-lg font-bold text-slate-900">XYZ Hostel Group</span>
+            <span className="text-lg font-bold text-slate-900">Hostel Manager</span>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
-          <p className="text-sm text-slate-500 mt-1 mb-6">Sign in to your management account.</p>
 
-          {showServer ? (
+          {view === "loading" && (
+            <div className="flex justify-center py-20"><Spinner className="h-8 w-8 text-brand-600" /></div>
+          )}
+
+          {/* Phone app: enter server address (shown once, then remembered) */}
+          {view === "server" && (
             <form onSubmit={saveServer} className="space-y-4">
               <div>
-                <span className="label">Hostel server address</span>
-                <input
-                  className="input"
-                  placeholder="e.g. hostel-api.onrender.com"
-                  value={serverInput}
-                  onChange={(e) => setServerInput(e.target.value)}
-                  autoFocus
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  Enter the web address of your hostel's backend server (given to you by your admin).
-                </p>
+                <h2 className="text-2xl font-bold text-slate-900">Connect to your hostel</h2>
+                <p className="text-sm text-slate-500 mt-1">Enter your hostel's web address to get started. You only do this once.</p>
               </div>
-              <div className="flex gap-2">
-                <Button type="submit" className="flex-1">Save & continue</Button>
-                {!needsServerConfig() && <Button type="button" variant="secondary" onClick={() => setShowServer(false)}>Cancel</Button>}
+              <div>
+                <span className="label">Server address</span>
+                <input className="input" placeholder="e.g. hostel-api-3fu5.onrender.com" value={serverInput} onChange={(e) => setServerInput(e.target.value)} autoFocus />
+                <p className="text-xs text-slate-400 mt-1">Your administrator will give you this address.</p>
               </div>
-            </form>
-          ) : (
-            <form onSubmit={submit} className="space-y-4">
-              <Input label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-              <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              <ErrorText>{error}</ErrorText>
-              <Button type="submit" loading={loading} className="w-full">Sign in</Button>
+              <Button type="submit" className="w-full">Continue</Button>
             </form>
           )}
 
-          <div className="mt-3 flex items-center justify-between">
-            <button type="button" onClick={() => setShowServer((s) => !s)} className="text-xs text-slate-400 hover:text-brand-600">
-              {isNativeApp() ? "⚙ Server settings" : getApiBase() === "/api" ? "" : "⚙ Change server"}
-            </button>
-            <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline">Forgot password?</Link>
-          </div>
+          {/* First-run: create the business + owner account */}
+          {view === "onboarding" && (
+            <form onSubmit={submitSetup} className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Welcome! Let's set up your business</h2>
+                <p className="text-sm text-slate-500 mt-1">Create your owner account. This is a one-time step.</p>
+              </div>
+              <Input label="Business name" placeholder="e.g. Khan Hostels" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required autoFocus />
+              <Input label="Your full name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required />
+              <Input label="Your email" type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} required />
+              <Input label="Create a password" type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} minLength={8} required />
+              <p className="text-xs text-slate-400">Use at least 8 characters. Keep it safe — this is your owner login.</p>
+              <ErrorText>{error}</ErrorText>
+              <Button type="submit" loading={loading} className="w-full">Create my account</Button>
+              {isNativeApp() && (
+                <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600 w-full text-center">⚙ Change server</button>
+              )}
+            </form>
+          )}
 
-          <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold text-slate-500 mb-2">Demo accounts (password: Password123)</p>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO.map((d) => (
-                <button
-                  key={d.email}
-                  onClick={() => { setEmail(d.email); setPassword("Password123"); }}
-                  className="text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-brand-400 hover:bg-brand-50 transition"
-                >
-                  <p className="text-sm font-semibold text-slate-700">{d.role}</p>
-                  <p className="text-[11px] text-slate-400 truncate">{d.email}</p>
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Normal login */}
+          {view === "login" && (
+            <>
+              <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+              <p className="text-sm text-slate-500 mt-1 mb-6">Sign in to your management account.</p>
+              <form onSubmit={submitLogin} className="space-y-4">
+                <Input label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+                <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <ErrorText>{error}</ErrorText>
+                <Button type="submit" loading={loading} className="w-full">Sign in</Button>
+              </form>
+              <div className="mt-3 flex items-center justify-between">
+                {isNativeApp() ? (
+                  <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600">⚙ Server settings</button>
+                ) : <span />}
+                <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline">Forgot password?</Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
