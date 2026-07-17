@@ -58,6 +58,46 @@ Time: ~10 minutes, mostly waiting.
 
 ---
 
+## 📧 Password-reset email (so "Forgot password?" works)
+
+By default the app can **generate** a reset link but has no way to **send** it — so if
+you (or a manager) forget a password, the "Forgot password?" button can't help. Turn on
+email once and it works for everyone, forever.
+
+> Staff lockouts don't strictly need this — as the **Owner** you can always reset any
+> staff member's password from **Users → (person) → Reset password**. Email mainly protects
+> **you**, since no one is above the owner to reset your login.
+
+### Easiest option — use your Gmail (free)
+
+**1. Create a Gmail "App Password"** (a one-time 16-character key just for this app):
+   - Your Google account must have **2-Step Verification** turned on
+     (Google Account → **Security** → **2-Step Verification**).
+   - Then go to **https://myaccount.google.com/apppasswords**, type a name like
+     `Hostel Manager`, and click **Create**. Google shows a 16-character password
+     (e.g. `abcd efgh ijkl mnop`) — copy it (remove the spaces).
+
+**2. Add these values in Render** → open the **`hostel-api`** service → **Environment** →
+   add each key, then click **Save** (the service redeploys automatically):
+
+   | Key | Value |
+   |-----|-------|
+   | `SMTP_HOST` | `smtp.gmail.com` |
+   | `SMTP_PORT` | `465` |
+   | `SMTP_USER` | your full Gmail address, e.g. `you@gmail.com` |
+   | `SMTP_PASS` | the 16-character app password (no spaces) |
+   | `MAIL_FROM` | `Hostel Manager <you@gmail.com>` |
+   | `WEB_APP_URL` | your website link, e.g. `https://hostel-web-us71.onrender.com` |
+
+**3. Test it:** on the login screen tap **Forgot password?**, enter your owner email, and
+   check your inbox (and spam) for the reset link. Done.
+
+*(Any SMTP provider works — Resend, SendGrid, Mailgun, etc. — just use their host, port,
+username and password in the same five fields. Leave the `SMTP_*` fields empty to keep email
+turned off; the app runs fine without it.)*
+
+---
+
 ## If something looks wrong
 | What you see | What to do |
 |--------------|-----------|

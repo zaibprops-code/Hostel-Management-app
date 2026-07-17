@@ -9,6 +9,8 @@ import { effectivePermissions } from "../lib/permissions";
 import { validateBody } from "../middleware/validate";
 import { authenticate } from "../middleware/auth";
 import { audit } from "../lib/audit";
+import { env } from "../lib/env";
+import { mailConfigured, sendPasswordResetEmail } from "../lib/mailer";
 
 const router = Router();
 
@@ -110,28 +112,40 @@ router.post(
   })
 );
 
-// POST /api/auth/forgot-password — issues a reset token.
-// In production this token is emailed; for now it is returned so the flow works
-// end-to-end without an external email provider.
+// POST /api/auth/forgot-password — issues a reset token and emails a reset link.
+// The response is intentionally generic so it never reveals whether an account
+// exists. If SMTP is not configured, the token is still created; in development
+// it is returned directly so the flow can be tested without an email provider.
 router.post(
   "/forgot-password",
   validateBody(z.object({ email: z.string().trim().toLowerCase() })),
   asyncHandler(async (req, res) => {
+    const generic = {
+      success: true as const,
+      message: "If an account exists for that email, we've sent a password reset link.",
+    };
     const user = await prisma.user.findUnique({ where: { email: req.body.email } });
-    if (user) {
-      const token = crypto.randomBytes(32).toString("hex");
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { resetToken: token, resetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000) },
-      });
-      // Do not leak whether the account exists in the generic response.
-      return res.json({
-        success: true,
-        message: "If the account exists, a reset link has been generated.",
-        devResetToken: process.env.NODE_ENV === "development" ? token : undefined,
-      });
+    if (!user || !user.isActive) return res.json(generic);
+
+    const token = crypto.randomBytes(32).toString("hex");
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken: token, resetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+
+    const resetUrl = `${env.webAppUrl.replace(/\/$/, "")}/reset-password?token=${token}`;
+    try {
+      await sendPasswordResetEmail(user.email, resetUrl);
+    } catch (err) {
+      // A send failure must not reveal account existence or 500 the request; the
+      // token stays valid so the user can retry. Log for the operator.
+      console.error("[forgot-password] failed to send reset email:", err);
     }
-    res.json({ success: true, message: "If the account exists, a reset link has been generated." });
+
+    // In development (no email set up), hand back the token so the flow is testable.
+    const devResetToken =
+      env.nodeEnv === "development" && !mailConfigured() ? token : undefined;
+    res.json({ ...generic, devResetToken });
   })
 );
 
