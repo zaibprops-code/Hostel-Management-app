@@ -11,8 +11,17 @@ import { audit } from "../lib/audit";
 
 const router = Router();
 
-const uploadRoot = path.join(process.cwd(), env.uploadDir);
-fs.mkdirSync(uploadRoot, { recursive: true });
+// On serverless/read-only hosts (e.g. Vercel) the project directory is
+// read-only and only /tmp is writable (and ephemeral), so fall back to it.
+// Wrapped in try/catch so a read-only filesystem can never crash startup.
+const uploadRoot = process.env.VERCEL
+  ? path.join("/tmp", "hms-uploads")
+  : path.join(process.cwd(), env.uploadDir);
+try {
+  fs.mkdirSync(uploadRoot, { recursive: true });
+} catch {
+  // Read-only filesystem (serverless) — uploads are best-effort only.
+}
 
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 

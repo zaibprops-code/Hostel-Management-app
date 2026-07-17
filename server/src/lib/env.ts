@@ -20,7 +20,11 @@ export const env = {
     accessExpires: process.env.JWT_ACCESS_EXPIRES ?? "15m",
     refreshExpires: process.env.JWT_REFRESH_EXPIRES ?? "7d",
   },
-  corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
+  // In production, default to allowing any origin so the native mobile app
+  // (and any browser deployment) can reach the API without extra config.
+  corsOrigin:
+    process.env.CORS_ORIGIN ??
+    (process.env.NODE_ENV === "production" ? "*" : "http://localhost:5173"),
   uploadDir: process.env.UPLOAD_DIR ?? "uploads",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
 };

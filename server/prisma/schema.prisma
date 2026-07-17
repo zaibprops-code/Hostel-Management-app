@@ -2,7 +2,10 @@
 // A normalized relational model for a scalable, multi-hostel SaaS platform.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" for local/dev; the rhel targets are the query-engine binaries
+  // needed on serverless hosts (e.g. Vercel's AWS Lambda runtime).
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
