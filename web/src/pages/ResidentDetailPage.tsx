@@ -108,21 +108,39 @@ export default function ResidentDetailPage() {
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-3">Rent Charges</h3>
             {!r.rentCharges.length ? <p className="text-sm text-slate-400">No charges yet.</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {r.rentCharges.map((c: any) => (
-                      <tr key={c.id} className="border-t border-slate-100">
-                        <td className="py-2">{c.periodMonth}/{c.periodYear}</td>
-                        <td>{formatPKR(c.amount)}</td><td>{formatPKR(c.amountPaid)}</td>
-                        <td className={c.balance > 0 ? "text-rose-600 font-medium" : ""}>{formatPKR(c.balance)}</td>
-                        <td><StatusBadge status={c.status} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile: rows */}
+                <div className="sm:hidden divide-y divide-slate-100">
+                  {r.rentCharges.map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 py-2.5">
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{c.periodMonth}/{c.periodYear}</p>
+                        <p className="text-xs text-slate-400">Paid {formatPKR(c.amountPaid)} of {formatPKR(c.amount)}</p>
+                      </div>
+                      <div className="text-right">
+                        <StatusBadge status={c.status} />
+                        {c.balance > 0 && <p className="text-xs text-rose-600 font-medium mt-1">{formatPKR(c.balance)} due</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop: table */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {r.rentCharges.map((c: any) => (
+                        <tr key={c.id} className="border-t border-slate-100">
+                          <td className="py-2">{c.periodMonth}/{c.periodYear}</td>
+                          <td>{formatPKR(c.amount)}</td><td>{formatPKR(c.amountPaid)}</td>
+                          <td className={c.balance > 0 ? "text-rose-600 font-medium" : ""}>{formatPKR(c.balance)}</td>
+                          <td><StatusBadge status={c.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </Card>
 

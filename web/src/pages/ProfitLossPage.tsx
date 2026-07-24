@@ -60,7 +60,23 @@ export default function ProfitLossPage() {
       {comparison && comparison.length > 1 && (
         <Card className="p-5 mt-4">
           <h3 className="font-semibold text-slate-800 mb-4">Hostel Comparison</h3>
-          <div className="overflow-x-auto">
+          {/* Mobile: cards */}
+          <div className="sm:hidden space-y-2">
+            {comparison.map((c) => (
+              <div key={c.hostel} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-800">{c.hostel}</p>
+                  <span className={c.profit >= 0 ? "font-bold text-emerald-600" : "font-bold text-rose-600"}>{formatPKR(c.profit)}</span>
+                </div>
+                <div className="mt-1 flex justify-between text-xs text-slate-400">
+                  <span>Rev {formatPKR(c.revenue)}</span>
+                  <span>Exp {formatPKR(c.expenses)}</span>
+                  <span>{c.occupancyRate}% full</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Hostel</th><th>Revenue</th><th>Expenses</th><th>Profit</th><th>Occupancy</th></tr></thead>
               <tbody>

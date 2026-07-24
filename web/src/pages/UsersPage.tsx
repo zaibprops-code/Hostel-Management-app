@@ -127,10 +127,10 @@ export default function UsersPage() {
 
         <div className="mt-4">
           <p className="label">Extra permissions (override role defaults)</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {GRANTABLE.map((p) => (
-              <label key={p} className="flex items-center gap-2 text-sm rounded-lg border border-slate-200 px-3 py-2">
-                <input type="checkbox" checked={!!form.permissions[p]} onChange={() => togglePerm(p)} />
+              <label key={p} className="flex items-center gap-2.5 text-sm rounded-lg border border-slate-200 px-3 py-2.5">
+                <input type="checkbox" className="h-4 w-4" checked={!!form.permissions[p]} onChange={() => togglePerm(p)} />
                 <span>{p}</span>
               </label>
             ))}
