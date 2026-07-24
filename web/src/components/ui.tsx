@@ -24,12 +24,17 @@ export function Card({ children, className }: { children: ReactNode; className?:
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+    <div className="mb-5 sm:mb-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{title}</h1>
+          {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {/* On desktop, actions sit inline at the right. */}
+        {actions && <div className="hidden sm:flex items-center gap-2 shrink-0">{actions}</div>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {/* On mobile, actions get their own full-width row so they're easy to tap. */}
+      {actions && <div className="sm:hidden mt-3 flex flex-col gap-2 [&_button]:w-full [&_a]:w-full [&>*]:w-full">{actions}</div>}
     </div>
   );
 }
@@ -112,19 +117,31 @@ export function EmptyState({ title, message, icon }: { title: string; message?: 
   );
 }
 
+// A dialog that behaves like a native app: a bottom sheet on phones (slides up,
+// rounded top, swipe-handle) and a centered card on larger screens.
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-sm sm:p-4"
+      onClick={onClose}
+    >
       <div
-        className={clsx("card w-full my-8", wide ? "max-w-3xl" : "max-w-lg")}
+        className={clsx(
+          "bg-white w-full flex flex-col max-h-[92vh] sm:max-h-[88vh]",
+          "rounded-t-3xl sm:rounded-2xl sm:border sm:border-slate-200 sm:shadow-xl",
+          "animate-[slideup_0.22s_ease-out] sm:animate-none",
+          wide ? "sm:max-w-3xl" : "sm:max-w-lg"
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        {/* Swipe handle (mobile) */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0"><span className="h-1.5 w-10 rounded-full bg-slate-300" /></div>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 sm:px-6 py-3 sm:py-4 shrink-0">
           <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-3xl leading-none -mt-1 p-1">&times;</button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-5 sm:px-6 py-5 overflow-y-auto safe-bottom">{children}</div>
       </div>
     </div>
   );

@@ -86,7 +86,7 @@ export default function DashboardPage() {
       />
 
       {/* KPI grid */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {can("hostels.view") && <StatCard label="Hostels" value={k.totalHostels} icon={<IconHostel />} sub={`${k.totalRooms} rooms`} />}
         <StatCard label="Beds" value={`${k.occupiedBeds}/${k.totalBeds}`} sub={`${k.occupancyRate}% occupancy`} icon={<IconBed />} accent="violet" />
         <StatCard label="Active Residents" value={k.activeResidents} sub={`${k.leavingSoon} leaving soon`} icon={<IconResidents />} accent="emerald" />

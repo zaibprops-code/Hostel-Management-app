@@ -42,7 +42,27 @@ export default function PaymentsPage() {
         <EmptyState title="No payments recorded" icon={<IconMoney className="h-12 w-12" />} />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <div className="sm:hidden divide-y divide-slate-100">
+            {data.data.map((p: any) => (
+              <div key={p.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-800 truncate">{p.resident.fullName}</p>
+                  <span className="font-bold text-emerald-600">{formatPKR(p.amount)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <p className="text-xs text-slate-400">{titleCase(p.method)} · {formatDate(p.paidAt)}</p>
+                  <StatusBadge status={p.status} />
+                </div>
+                <div className="flex gap-4 mt-2">
+                  <button onClick={() => viewReceipt(p.id)} className="text-brand-600 text-sm font-medium">Receipt</button>
+                  {can("payments.manage") && p.status === "COMPLETED" && <button onClick={() => voidPayment(p.id)} className="text-rose-600 text-sm font-medium">Void</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr>
                 <th className="th">Resident</th><th className="th">Amount</th><th className="th">Method</th>

@@ -51,7 +51,7 @@ export default function NoticesPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Notice">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select label="Scope" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>
             <option value="">Company-wide</option>
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}

@@ -56,7 +56,18 @@ export default function AdmissionsPage() {
         <EmptyState title="No admissions yet" message="Start by reserving a resident, then admit them to a bed." icon={<IconAdmission className="h-12 w-12" />} />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="sm:hidden divide-y divide-slate-100">
+            {admissions.map((a) => (
+              <div key={a.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-800 truncate">{a.resident.fullName}</p>
+                  <span className="font-semibold text-slate-700 shrink-0">{formatPKR(a.monthlyRent)}/mo</span>
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">{a.room} · {a.bed} · {formatDate(a.admissionDate)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr>
                 <th className="th">Resident</th><th className="th">Hostel</th><th className="th">Room / Bed</th>
@@ -83,7 +94,7 @@ export default function AdmissionsPage() {
         {reserved.length === 0 ? (
           <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">No reserved residents. Create a resident first (they start as Reserved).</p>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Select label="Resident (Reserved)" value={form.residentId} onChange={(e) => setForm({ ...form, residentId: e.target.value })}>
               <option value="">Select…</option>
               {reserved.map((r) => <option key={r.id} value={r.id}>{r.fullName} · {r.hostel.name}</option>)}

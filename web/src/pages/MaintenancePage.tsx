@@ -58,7 +58,7 @@ export default function MaintenancePage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Maintenance Ticket">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Priority" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{["LOW", "MEDIUM", "HIGH", "URGENT"].map((p) => <option key={p} value={p}>{titleCase(p)}</option>)}</Select>
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />

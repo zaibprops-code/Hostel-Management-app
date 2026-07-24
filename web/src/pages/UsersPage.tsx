@@ -64,7 +64,24 @@ export default function UsersPage() {
 
       {!data?.length ? <EmptyState title="No users" icon={<IconUsers className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="sm:hidden divide-y divide-slate-100">
+            {data.map((u) => (
+              <div key={u.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{u.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                  </div>
+                  <Badge color="blue">{titleCase(u.role)}</Badge>
+                </div>
+                <div className="flex gap-4 mt-2">
+                  <button onClick={() => openEdit(u)} className="text-brand-600 text-sm font-medium">Edit</button>
+                  <button onClick={() => resetPassword(u)} className="text-slate-500 text-sm font-medium">Reset password</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Name</th><th className="th">Role</th><th className="th">Hostels</th><th className="th">Last Login</th><th className="th">Status</th><th className="th"></th></tr></thead>
               <tbody>
@@ -88,7 +105,7 @@ export default function UsersPage() {
       )}
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? "Edit User" : "New User"} wide>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Email" type="email" value={form.email} disabled={!!editing} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />

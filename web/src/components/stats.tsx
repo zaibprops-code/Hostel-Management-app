@@ -12,14 +12,14 @@ export function StatCard({ label, value, sub, icon, accent = "brand" }: { label:
     slate: "bg-slate-100 text-slate-600",
   };
   return (
-    <Card className="p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
-          {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-slate-400 truncate">{label}</p>
+          <p className="mt-1.5 sm:mt-2 text-xl sm:text-2xl font-bold text-slate-900 truncate">{value}</p>
+          {sub && <p className="mt-1 text-xs text-slate-400 truncate">{sub}</p>}
         </div>
-        {icon && <div className={clsx("h-10 w-10 rounded-lg grid place-items-center", accents[accent])}>{icon}</div>}
+        {icon && <div className={clsx("hidden sm:grid h-10 w-10 rounded-lg place-items-center shrink-0", accents[accent])}>{icon}</div>}
       </div>
     </Card>
   );

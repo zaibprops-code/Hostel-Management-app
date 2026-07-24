@@ -58,7 +58,24 @@ export default function ResidentsPage() {
         <EmptyState title="No residents found" message="Try adjusting filters or add a new resident." icon={<IconResidents className="h-12 w-12" />} />
       ) : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: tap-friendly cards */}
+          <div className="sm:hidden divide-y divide-slate-100">
+            {data.data.map((r: any) => (
+              <Link key={r.id} to={`/residents/${r.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
+                <div className="h-10 w-10 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center font-semibold">{r.fullName.charAt(0)}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-800 truncate">{r.fullName}</p>
+                    <StatusBadge status={r.status} />
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">{r.room ? `${r.room} · ${r.bed}` : "No bed"} · {formatPKR(r.monthlyRent)}/mo</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
@@ -95,7 +112,7 @@ export default function ResidentsPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Resident" wide>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </Select>

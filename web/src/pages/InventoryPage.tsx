@@ -38,7 +38,21 @@ export default function InventoryPage() {
 
       {!data?.length ? <EmptyState title="No inventory items" icon={<IconInventory className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="sm:hidden divide-y divide-slate-100">
+            {data.map((i) => (
+              <div key={i.id} className={clsx("px-4 py-3", i.lowStock && "bg-amber-50/40")}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-800 truncate">{i.name}</p>
+                  {i.expired ? <Badge color="red">Expired</Badge> : i.nearExpiry ? <Badge color="amber">Near expiry</Badge> : i.lowStock ? <Badge color="amber">Low</Badge> : <Badge color="green">OK</Badge>}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <p className="text-xs text-slate-400">{i.category} · <span className="font-semibold text-slate-600">{i.quantity} {i.unit}</span></p>
+                  {can("inventory.manage") && <button onClick={() => setTxn(i)} className="text-brand-600 text-sm font-medium">Adjust</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Item</th><th className="th">Category</th><th className="th">Stock</th><th className="th">Min</th><th className="th">Status</th><th className="th">Hostel</th><th className="th"></th></tr></thead>
               <tbody>
@@ -60,7 +74,7 @@ export default function InventoryPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Inventory Item">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
