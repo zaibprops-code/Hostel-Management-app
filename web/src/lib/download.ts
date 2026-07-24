@@ -34,14 +34,20 @@ export async function downloadFile(url: string, filename: string): Promise<void>
   if (isNativeApp()) {
     const { Filesystem, Directory } = await import("@capacitor/filesystem");
     const data = await blobToBase64(await fetchBlob(url));
-    try {
-      await Filesystem.writeFile({ path: name, data, directory: Directory.Documents, recursive: true });
-      alert(`Saved to your Documents folder as "${name}".`);
-    } catch {
-      // If saving to Documents is blocked, fall back to the share sheet so the
-      // user can still save it wherever they like.
-      await shareFile(url, name);
+    // Try the most user-visible locations first; never silently open Share.
+    const targets: { dir: any; label: string }[] = [
+      { dir: Directory.Documents, label: "Documents" },
+      { dir: Directory.External, label: "app storage" },
+      { dir: Directory.Data, label: "app storage" },
+    ];
+    for (const t of targets) {
+      try {
+        await Filesystem.writeFile({ path: name, data, directory: t.dir, recursive: true });
+        alert(`Saved "${name}" to your ${t.label} folder.`);
+        return;
+      } catch { /* try the next location */ }
     }
+    alert("Couldn't save the file to storage. Use the Share button to save it to Files, Drive, etc.");
     return;
   }
 

@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
-import { isNativeApp } from "../lib/api";
 
 interface Props {
   open: boolean;
@@ -9,6 +8,41 @@ interface Props {
   name: string; // download filename / caption
   mime?: string | null; // used to decide how to render
   onDelete?: () => void; // shown as a Delete button when provided
+}
+
+// Renders a PDF's pages as images, entirely in-app (no external viewer).
+function PdfPages({ url }: { url: string }) {
+  const [pages, setPages] = useState<string[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPages(null); setError(false);
+    (async () => {
+      try {
+        const { renderPdf } = await import("../lib/pdf");
+        const imgs = await renderPdf(url);
+        if (!cancelled) setPages(imgs);
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  if (error) {
+    return <p className="text-slate-300 text-sm">Couldn't preview this PDF. Use Download or Share below to open it.</p>;
+  }
+  if (!pages) {
+    return <p className="text-slate-300 text-sm animate-pulse">Loading document…</p>;
+  }
+  return (
+    <div className="w-full max-w-3xl mx-auto space-y-3">
+      {pages.map((src, i) => (
+        <img key={i} src={src} alt={`Page ${i + 1}`} className="w-full rounded-lg bg-white shadow" />
+      ))}
+    </div>
+  );
 }
 
 // A full-screen viewer for a resident's photo or document. Renders images and
@@ -36,17 +70,7 @@ export default function FileViewer({ open, onClose, url, name, mime, onDelete }:
         {isImage ? (
           <img src={url} alt={name} className="max-h-full max-w-full object-contain rounded-lg" />
         ) : isPdf ? (
-          isNativeApp() ? (
-            // Android's WebView can't render a remote PDF inline — offer to open/save it.
-            <div className="text-center text-slate-200">
-              <div className="text-6xl mb-3">📄</div>
-              <p className="mb-1 font-medium break-all px-6">{name}</p>
-              <p className="text-sm text-slate-400 mb-4">PDF document</p>
-              <button onClick={doDownload} disabled={!!busy} className="btn-primary">{busy === "download" ? "Opening…" : "Download / Open PDF"}</button>
-            </div>
-          ) : (
-            <iframe src={url} title={name} className="w-full h-full bg-white rounded-lg" />
-          )
+          <PdfPages url={url} />
         ) : (
           <div className="text-center text-slate-200">
             <p className="mb-3">Preview isn't available for this file type.</p>
