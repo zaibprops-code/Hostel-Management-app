@@ -27,6 +27,7 @@ import usersRouter from "./modules/users";
 import { auditRouter, notificationsRouter } from "./modules/misc";
 import portalRouter from "./modules/portal";
 import uploadsRouter from "./modules/uploads";
+import filesRouter from "./modules/files";
 
 export function createApp() {
   const app = express();
@@ -68,7 +69,10 @@ export function createApp() {
   app.use("/api/setup", setupRouter);
   app.use("/api/auth", authLimiter, authRouter);
 
-  // Uploaded files (served with access checks in the router)
+  // Uploaded files. New uploads are stored in the database and served from
+  // /files/:id (persists across restarts). The legacy static folder is kept
+  // for any files written before the switch.
+  app.use("/files", filesRouter);
   app.use("/uploads", express.static(path.join(process.cwd(), env.uploadDir)));
 
   // Protected routes

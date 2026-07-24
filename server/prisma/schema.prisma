@@ -466,6 +466,17 @@ model ResidentDocument {
   @@index([residentId])
 }
 
+// Uploaded file bytes stored in the database so they persist across server
+// restarts/redeploys without needing a separate storage service. Served
+// (public, unguessable id) via GET /files/:id.
+model StoredFile {
+  id        String   @id @default(cuid())
+  data      Bytes
+  mimeType  String
+  fileName  String?
+  createdAt DateTime @default(now())
+}
+
 model Admission {
   id            String   @id @default(cuid())
   hostelId      String
