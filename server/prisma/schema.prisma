@@ -400,6 +400,7 @@ model Resident {
   userId    String? @unique // optional resident portal login
 
   fullName        String
+  photoUrl        String? // profile / passport-size picture
   guardianName    String?
   dateOfBirth     DateTime?
   gender          Gender?

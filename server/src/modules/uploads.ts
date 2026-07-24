@@ -63,4 +63,51 @@ router.post(
   })
 );
 
+// POST /api/uploads/resident/:id/photo — profile / passport-size picture
+router.post(
+  "/resident/:id/photo",
+  requirePermission("residents.manage"),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest("No file uploaded");
+    if (!req.file.mimetype.startsWith("image/")) {
+      fs.unlink(path.join(uploadRoot, req.file.filename), () => {});
+      throw badRequest("Profile picture must be an image");
+    }
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) {
+      fs.unlink(path.join(uploadRoot, req.file.filename), () => {});
+      throw notFound("Resident not found");
+    }
+    await assertHostelAccess(req, resident.hostelId);
+
+    // Remove the previous photo file if it lived in our uploads folder.
+    if (resident.photoUrl?.startsWith("/uploads/")) {
+      fs.unlink(path.join(uploadRoot, path.basename(resident.photoUrl)), () => {});
+    }
+
+    const photoUrl = `/uploads/${req.file.filename}`;
+    await prisma.resident.update({ where: { id: resident.id }, data: { photoUrl } });
+    await audit({ userId: req.auth!.id, action: "resident.photo", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId });
+    res.status(201).json({ photoUrl });
+  })
+);
+
+// DELETE /api/uploads/resident/document/:docId — remove a document
+router.delete(
+  "/resident/document/:docId",
+  requirePermission("residents.manage"),
+  asyncHandler(async (req, res) => {
+    const doc = await prisma.residentDocument.findUnique({ where: { id: req.params.docId }, include: { resident: true } });
+    if (!doc) throw notFound("Document not found");
+    await assertHostelAccess(req, doc.resident.hostelId);
+    if (doc.fileUrl.startsWith("/uploads/")) {
+      fs.unlink(path.join(uploadRoot, path.basename(doc.fileUrl)), () => {});
+    }
+    await prisma.residentDocument.delete({ where: { id: doc.id } });
+    await audit({ userId: req.auth!.id, action: "document.delete", entity: "ResidentDocument", entityId: doc.id, hostelId: doc.resident.hostelId });
+    res.status(204).end();
+  })
+);
+
 export default router;

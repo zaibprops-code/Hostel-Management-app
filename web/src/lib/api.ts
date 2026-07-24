@@ -51,6 +51,15 @@ export function getApiBase(): string {
   return "/api";
 }
 
+// Build an absolute URL for a server asset (e.g. "/uploads/xyz.jpg"). Uploads
+// are served from the API origin, one level above the "/api" base.
+export function assetUrl(pathOrUrl: string | null | undefined): string {
+  if (!pathOrUrl) return "";
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const origin = getApiBase().replace(/\/api$/, "");
+  return `${origin}${pathOrUrl}`;
+}
+
 export function setApiBase(input: string): void {
   localStorage.setItem(API_BASE_KEY, normalizeApiBase(input));
 }

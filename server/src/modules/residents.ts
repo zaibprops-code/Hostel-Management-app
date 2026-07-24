@@ -73,6 +73,7 @@ router.get(
       data: residents.map((r) => ({
         id: r.id,
         fullName: r.fullName,
+        photoUrl: r.photoUrl,
         phone: r.phone,
         cnic: r.cnic,
         status: r.status,

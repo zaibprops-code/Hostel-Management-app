@@ -1,10 +1,15 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, apiError } from "../lib/api";
+import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
+
+const DOC_TYPES: [string, string][] = [
+  ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
+  ["STUDENT_CARD", "Student card"], ["UNIVERSITY_CARD", "University card"], ["CONTRACT", "Contract"], ["OTHER", "Other"],
+];
 
 export default function ResidentDetailPage() {
   const { id } = useParams();
@@ -20,6 +25,30 @@ export default function ResidentDetailPage() {
   const [portal, setPortal] = useState(false);
   const [portalForm, setPortalForm] = useState<any>({ email: "", password: "" });
   const [portalDone, setPortalDone] = useState("");
+  const [docOpen, setDocOpen] = useState(false);
+  const [docForm, setDocForm] = useState<{ type: string; file: File | null }>({ type: "CNIC_FRONT", file: null });
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadPhoto(file?: File) {
+    if (!file) return;
+    setUploading(true); setError("");
+    try { const fd = new FormData(); fd.append("file", file); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
+    catch (e) { setError(apiError(e)); } finally { setUploading(false); }
+  }
+  async function uploadDoc() {
+    if (!docForm.file) return;
+    setUploading(true); setError("");
+    try {
+      const fd = new FormData(); fd.append("file", docForm.file); fd.append("type", docForm.type);
+      await api.post(`/uploads/resident/${id}/document`, fd);
+      setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); await refetch();
+    } catch (e) { setError(apiError(e)); } finally { setUploading(false); }
+  }
+  async function deleteDoc(docId: string) {
+    if (!confirm("Delete this document?")) return;
+    try { await api.delete(`/uploads/resident/document/${docId}`); await refetch(); }
+    catch (e) { alert(apiError(e)); }
+  }
 
   async function createPortalAccess() {
     setSaving(true); setError("");
@@ -81,11 +110,39 @@ export default function ResidentDetailPage() {
         {/* Left: profile */}
         <Card className="p-5 lg:col-span-1">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-14 w-14 rounded-full bg-brand-100 text-brand-700 grid place-items-center text-xl font-bold">{r.fullName.charAt(0)}</div>
-            <div>
-              <p className="font-semibold text-slate-900">{r.fullName}</p>
-              <StatusBadge status={r.status} />
+            <div className="h-16 w-16 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center text-xl font-bold overflow-hidden">
+              {r.photoUrl ? <img src={assetUrl(r.photoUrl)} alt={r.fullName} className="h-full w-full object-cover" /> : r.fullName.charAt(0)}
             </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900 truncate">{r.fullName}</p>
+              <StatusBadge status={r.status} />
+              {can("residents.manage") && (
+                <label className="block text-xs text-brand-600 font-medium mt-1 cursor-pointer">
+                  {uploading ? "Uploading…" : r.photoUrl ? "Change photo" : "Add photo"}
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadPhoto(e.target.files?.[0])} />
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* Documents */}
+          <div className="border-t border-slate-100 pt-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-slate-700">Documents</h4>
+              {can("residents.manage") && <button onClick={() => { setDocForm({ type: "CNIC_FRONT", file: null }); setError(""); setDocOpen(true); }} className="text-brand-600 text-sm font-medium">+ Add</button>}
+            </div>
+            {!r.documents?.length ? <p className="text-xs text-slate-400">No documents uploaded.</p> : (
+              <div className="space-y-1.5">
+                {r.documents.map((d: any) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2 text-sm rounded-lg bg-slate-50 px-3 py-2">
+                    <a href={assetUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-brand-600 hover:underline">
+                      {DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? titleCase(d.type)}
+                    </a>
+                    {can("residents.manage") && <button onClick={() => deleteDoc(d.id)} className="text-rose-500 text-xs shrink-0">Delete</button>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <dl className="space-y-2 text-sm">
             {[["Guardian", r.guardianName], ["Phone", r.phone], ["CNIC", r.cnic], ["City", r.city], ["University", r.university], ["Program", r.program], ["Food Plan", r.foodPlan?.name], ["Admission", formatDate(r.admissionDate)], ["Monthly Rent", formatPKR(r.monthlyRent)]].map(([k, v]) => (
@@ -183,6 +240,24 @@ export default function ResidentDetailPage() {
           <p className="text-xs text-slate-400">Share these details with the resident. They can change the password later.</p>
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPortal(false)}>Cancel</Button><Button loading={saving} onClick={createPortalAccess}>Create Login</Button></div>
+        </div>
+      </Modal>
+
+      {/* Document upload modal */}
+      <Modal open={docOpen} onClose={() => setDocOpen(false)} title="Add Document">
+        <div className="space-y-3">
+          <Select label="Document type" value={docForm.type} onChange={(e) => setDocForm({ ...docForm, type: e.target.value })}>
+            {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </Select>
+          <label className="block">
+            <span className="label">File (image or PDF)</span>
+            <label className="input flex items-center cursor-pointer text-slate-500 truncate">
+              {docForm.file ? docForm.file.name : "Choose file…"}
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setDocForm({ ...docForm, file: e.target.files?.[0] ?? null })} />
+            </label>
+          </label>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDocOpen(false)}>Cancel</Button><Button loading={uploading} disabled={!docForm.file} onClick={uploadDoc}>Upload</Button></div>
         </div>
       </Modal>
 

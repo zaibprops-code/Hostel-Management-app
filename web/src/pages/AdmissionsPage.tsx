@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, apiError } from "../lib/api";
+import { api, apiError, assetUrl } from "../lib/api";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate } from "../lib/format";
 import { IconAdmission, IconPlus, IconSearch } from "../components/icons";
+
+// Document kinds a hostel typically keeps for a resident.
+const DOC_TYPES: [string, string][] = [
+  ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
+  ["STUDENT_CARD", "Student card"], ["UNIVERSITY_CARD", "University card"], ["CONTRACT", "Contract"], ["OTHER", "Other"],
+];
 
 const EMPTY = {
   // resident details
@@ -32,10 +38,21 @@ export default function AdmissionsPage() {
   const [form, setForm] = useState<any>(EMPTY);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Attachments (uploaded after the resident is created).
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [docs, setDocs] = useState<{ type: string; file: File | null }[]>([]);
+
+  function pickPhoto(file?: File) {
+    if (!file) return;
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
 
   async function openModal() {
     setError("");
     setForm({ ...EMPTY, hostelId: hostels[0]?.id ?? "" });
+    setPhoto(null); setPhotoPreview(""); setDocs([]);
     try {
       const [bedRes, planRes] = await Promise.all([
         api.get(withQuery("/structure/available-beds", scopeParam)),
@@ -84,7 +101,28 @@ export default function AdmissionsPage() {
         initialPayment: form.initialPayment,
         paymentMethod: form.paymentMethod,
       };
-      await api.post("/admissions", payload);
+      const { data } = await api.post("/admissions", payload);
+      const residentId = data.residentId as string;
+
+      // Phase 2: upload the picture and documents to the new resident.
+      const failures: string[] = [];
+      if (photo) {
+        try {
+          const fd = new FormData(); fd.append("file", photo);
+          await api.post(`/uploads/resident/${residentId}/photo`, fd);
+        } catch { failures.push("profile picture"); }
+      }
+      for (const d of docs) {
+        if (!d.file) continue;
+        try {
+          const fd = new FormData(); fd.append("file", d.file); fd.append("type", d.type);
+          await api.post(`/uploads/resident/${residentId}/document`, fd);
+        } catch { failures.push(DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? "document"); }
+      }
+      if (failures.length) {
+        alert(`Resident saved, but these could not be uploaded: ${failures.join(", ")}. You can add them from the resident's profile.`);
+      }
+
       setOpen(false); setPage(1); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
@@ -120,7 +158,9 @@ export default function AdmissionsPage() {
           <div className="lg:hidden divide-y divide-slate-100">
             {data.data.map((r: any) => (
               <Link key={r.id} to={`/residents/${r.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50">
-                <div className="h-10 w-10 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center font-semibold">{r.fullName.charAt(0)}</div>
+                <div className="h-10 w-10 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center font-semibold overflow-hidden">
+                  {r.photoUrl ? <img src={assetUrl(r.photoUrl)} alt="" className="h-full w-full object-cover" /> : r.fullName.charAt(0)}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-slate-800 truncate">{r.fullName}</p>
@@ -170,6 +210,22 @@ export default function AdmissionsPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Admission" wide>
+        {/* --- Profile picture --- */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className="h-20 w-20 shrink-0 rounded-full bg-slate-100 overflow-hidden grid place-items-center border border-slate-200">
+            {photoPreview
+              ? <img src={photoPreview} alt="Preview" className="h-full w-full object-cover" />
+              : <span className="text-2xl text-slate-300">{form.fullName?.charAt(0) || "🧑"}</span>}
+          </div>
+          <div>
+            <label className="btn-secondary cursor-pointer inline-flex">
+              {photo ? "Change photo" : "Upload photo"}
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => pickPhoto(e.target.files?.[0])} />
+            </label>
+            <p className="text-xs text-slate-400 mt-1">Passport-size / profile picture (optional)</p>
+          </div>
+        </div>
+
         {/* --- Resident details --- */}
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Resident details</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -217,6 +273,29 @@ export default function AdmissionsPage() {
           )}
         </div>
         {!form.bedId && <p className="text-xs text-slate-400 mt-2">No bed selected — the resident is saved as <b>Reserved</b>. You can admit them to a bed later from here.</p>}
+
+        {/* --- Documents (CNIC, passport, etc.) --- */}
+        <div className="mt-5 flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Documents</p>
+          <button type="button" onClick={() => setDocs([...docs, { type: "CNIC_FRONT", file: null }])} className="text-brand-600 text-sm font-medium">+ Add document</button>
+        </div>
+        {docs.length === 0 && <p className="text-xs text-slate-400">Attach CNIC, passport or other files (optional).</p>}
+        <div className="space-y-2">
+          {docs.map((d, i) => (
+            <div key={i} className="flex flex-col sm:flex-row gap-2 rounded-xl border border-slate-200 p-2.5">
+              <select className="input bg-white sm:max-w-[180px]" value={d.type}
+                onChange={(e) => setDocs(docs.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}>
+                {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <label className="input flex-1 flex items-center cursor-pointer text-slate-500 truncate">
+                {d.file ? d.file.name : "Choose file…"}
+                <input type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={(e) => setDocs(docs.map((x, j) => j === i ? { ...x, file: e.target.files?.[0] ?? null } : x))} />
+              </label>
+              <button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} className="text-rose-600 text-sm font-medium px-2 self-center">Remove</button>
+            </div>
+          ))}
+        </div>
 
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2">
