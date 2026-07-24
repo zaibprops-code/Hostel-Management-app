@@ -67,7 +67,7 @@ export default function ComplaintsPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Complaint">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}</Select>
           <div className="col-span-2"><Input label="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>

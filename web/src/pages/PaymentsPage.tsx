@@ -43,7 +43,7 @@ export default function PaymentsPage() {
       ) : (
         <Card className="overflow-hidden">
           {/* Mobile cards */}
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.data.map((p: any) => (
               <div key={p.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -62,7 +62,7 @@ export default function PaymentsPage() {
             ))}
           </div>
           {/* Desktop table */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr>
                 <th className="th">Resident</th><th className="th">Amount</th><th className="th">Method</th>

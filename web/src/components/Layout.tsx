@@ -201,6 +201,7 @@ export default function Layout() {
             </div>
             <div className="p-4 pt-0">
               <button onClick={handleLogout} className="btn-danger w-full"><IconLogout className="h-5 w-5" /> Log out</button>
+              <p className="mt-3 text-center text-[11px] text-slate-400">Hostel Manager · build {__BUILD_ID__}</p>
             </div>
           </div>
         </div>

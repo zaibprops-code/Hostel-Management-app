@@ -70,7 +70,7 @@ export default function FoodPage() {
           <h3 className="font-semibold text-slate-800 mb-3">Weekly Menu {hostels.length > 1 && <span className="text-xs font-normal text-slate-400">({hostels[0]?.name})</span>}</h3>
 
           {/* Mobile: one card per day with its three meals stacked */}
-          <div className="sm:hidden space-y-3">
+          <div className="lg:hidden space-y-3">
             {DAYS.map((day, di) => (
               <div key={day} className="rounded-xl border border-slate-200 overflow-hidden">
                 <div className="bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">{day}</div>
@@ -88,7 +88,7 @@ export default function FoodPage() {
           </div>
 
           {/* Desktop: table */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Day</th>{MEALS.map((m) => <th key={m}>{titleCase(m)}</th>)}</tr></thead>
               <tbody>

@@ -38,7 +38,7 @@ export default function StaffPage() {
 
       {!data?.length ? <EmptyState title="No staff yet" icon={<IconStaff className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.map((s) => (
               <div key={s.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -52,7 +52,7 @@ export default function StaffPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Name</th><th className="th">Role</th><th className="th">Phone</th><th className="th">Joined</th><th className="th">Salary</th><th className="th">Hostel</th><th className="th"></th></tr></thead>
               <tbody>
@@ -74,7 +74,7 @@ export default function StaffPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Staff Member">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Role" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{TYPES.map((t) => <option key={t} value={t}>{titleCase(t)}</option>)}</Select>
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -88,7 +88,7 @@ export default function StaffPage() {
       </Modal>
 
       <Modal open={!!salary} onClose={() => setSalary(null)} title={salary ? `Pay Salary — ${salary.name}` : ""}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Input label="Month" type="number" value={salForm.periodMonth} onChange={(e) => setSalForm({ ...salForm, periodMonth: +e.target.value })} />
           <Input label="Year" type="number" value={salForm.periodYear} onChange={(e) => setSalForm({ ...salForm, periodYear: +e.target.value })} />
           <Input label="Advance" type="number" value={salForm.advance} onChange={(e) => setSalForm({ ...salForm, advance: +e.target.value })} />

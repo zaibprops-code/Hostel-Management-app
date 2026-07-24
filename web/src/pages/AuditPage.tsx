@@ -16,7 +16,7 @@ export default function AuditPage() {
       <PageHeader title="Audit Logs" subtitle="Immutable record of important actions" />
       {!data?.data.length ? <EmptyState title="No audit entries" icon={<IconAudit className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.data.map((l: any) => (
               <div key={l.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -27,7 +27,7 @@ export default function AuditPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Time</th><th className="th">User</th><th className="th">Action</th><th className="th">Entity</th><th className="th">Details</th></tr></thead>
               <tbody>

@@ -49,7 +49,7 @@ export default function ExpensesPage() {
 
       {loading ? <PageLoader /> : !data?.data.length ? <EmptyState title="No expenses" icon={<IconExpense className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.data.map((e: any) => (
               <div key={e.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -63,7 +63,7 @@ export default function ExpensesPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Category</th><th className="th">Amount</th><th className="th">Vendor</th><th className="th">Hostel</th><th className="th">Date</th><th className="th">Status</th><th className="th"></th></tr></thead>
               <tbody>
@@ -89,7 +89,7 @@ export default function ExpensesPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Expense">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}</Select>
           <Input label="Amount" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: +e.target.value })} />

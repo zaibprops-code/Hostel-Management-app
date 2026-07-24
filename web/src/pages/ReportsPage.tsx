@@ -43,7 +43,7 @@ export default function ReportsPage() {
 
         <Section title="Rent Collection">
           {rent.data && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 text-sm">
               <Kpi label="Expected" value={formatPKR(rent.data.expected)} />
               <Kpi label="Collected" value={formatPKR(rent.data.collected)} good />
               <Kpi label="Outstanding" value={formatPKR(rent.data.outstanding)} bad />

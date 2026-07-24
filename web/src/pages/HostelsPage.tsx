@@ -76,7 +76,7 @@ export default function HostelsPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Hostel">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
           <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />

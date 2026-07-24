@@ -64,7 +64,7 @@ export default function UsersPage() {
 
       {!data?.length ? <EmptyState title="No users" icon={<IconUsers className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.map((u) => (
               <div key={u.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -81,7 +81,7 @@ export default function UsersPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Name</th><th className="th">Role</th><th className="th">Hostels</th><th className="th">Last Login</th><th className="th">Status</th><th className="th"></th></tr></thead>
               <tbody>
@@ -105,7 +105,7 @@ export default function UsersPage() {
       )}
 
       <Modal open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? "Edit User" : "New User"} wide>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Email" type="email" value={form.email} disabled={!!editing} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
@@ -127,7 +127,7 @@ export default function UsersPage() {
 
         <div className="mt-4">
           <p className="label">Extra permissions (override role defaults)</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {GRANTABLE.map((p) => (
               <label key={p} className="flex items-center gap-2.5 text-sm rounded-lg border border-slate-200 px-3 py-2.5">
                 <input type="checkbox" className="h-4 w-4" checked={!!form.permissions[p]} onChange={() => togglePerm(p)} />

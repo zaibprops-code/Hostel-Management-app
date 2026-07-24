@@ -46,7 +46,7 @@ export default function PortalPage() {
       <header className="bg-white border-b border-slate-200 px-4 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2"><span className="text-2xl">🏨</span><span className="font-bold text-slate-800">{r.hostel.name}</span></div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500 hidden sm:block">{user?.name}</span>
+          <span className="text-sm text-slate-500 hidden lg:block">{user?.name}</span>
           <Button variant="secondary" onClick={logout}>Logout</Button>
         </div>
       </header>

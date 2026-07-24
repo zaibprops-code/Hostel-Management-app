@@ -30,7 +30,7 @@ export default function VisitorsPage() {
 
       {!data?.length ? <EmptyState title="No visitors logged" icon={<IconVisitor className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.map((v) => (
               <div key={v.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
@@ -42,7 +42,7 @@ export default function VisitorsPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Visitor</th><th className="th">Phone</th><th className="th">Purpose</th><th className="th">Arrival</th><th className="th">Departure</th><th className="th">Hostel</th><th className="th"></th></tr></thead>
               <tbody>
@@ -64,7 +64,7 @@ export default function VisitorsPage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Register Visitor">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="CNIC" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} />

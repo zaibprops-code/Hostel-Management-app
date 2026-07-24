@@ -110,7 +110,7 @@ export default function ResidentDetailPage() {
             {!r.rentCharges.length ? <p className="text-sm text-slate-400">No charges yet.</p> : (
               <>
                 {/* Mobile: rows */}
-                <div className="sm:hidden divide-y divide-slate-100">
+                <div className="lg:hidden divide-y divide-slate-100">
                   {r.rentCharges.map((c: any) => (
                     <div key={c.id} className="flex items-center justify-between gap-2 py-2.5">
                       <div>
@@ -125,7 +125,7 @@ export default function ResidentDetailPage() {
                   ))}
                 </div>
                 {/* Desktop: table */}
-                <div className="hidden sm:block overflow-x-auto">
+                <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead>
                     <tbody>
@@ -201,7 +201,7 @@ export default function ResidentDetailPage() {
             <div className="flex justify-between"><span className="text-slate-500">Deposit held</span><span className="font-medium">{formatPKR(r.deposit?.amount ?? 0)}</span></div>
           </div>
           <Input label="Checkout date" type="date" value={coForm.checkoutDate} onChange={(e) => setCoForm({ ...coForm, checkoutDate: e.target.value })} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <Input label="Damage charges" type="number" value={coForm.damageCharges} onChange={(e) => setCoForm({ ...coForm, damageCharges: +e.target.value })} />
             <Input label="Other charges" type="number" value={coForm.otherCharges} onChange={(e) => setCoForm({ ...coForm, otherCharges: +e.target.value })} />
           </div>

@@ -61,7 +61,7 @@ export default function ProfitLossPage() {
         <Card className="p-5 mt-4">
           <h3 className="font-semibold text-slate-800 mb-4">Hostel Comparison</h3>
           {/* Mobile: cards */}
-          <div className="sm:hidden space-y-2">
+          <div className="lg:hidden space-y-2">
             {comparison.map((c) => (
               <div key={c.hostel} className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
@@ -76,7 +76,7 @@ export default function ProfitLossPage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Hostel</th><th>Revenue</th><th>Expenses</th><th>Profit</th><th>Occupancy</th></tr></thead>
               <tbody>

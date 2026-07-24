@@ -35,7 +35,7 @@ export default function IncomePage() {
 
       {loading ? <PageLoader /> : !data?.data.length ? <EmptyState title="No income recorded" icon={<IconIncome className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="lg:hidden divide-y divide-slate-100">
             {data.data.map((i: any) => (
               <div key={i.id} className="px-4 py-3 flex items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -46,7 +46,7 @@ export default function IncomePage() {
               </div>
             ))}
           </div>
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr><th className="th">Category</th><th className="th">Amount</th><th className="th">Resident</th><th className="th">Hostel</th><th className="th">Date</th></tr></thead>
               <tbody>
@@ -70,7 +70,7 @@ export default function IncomePage() {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Income">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}</Select>
           <Input label="Amount" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: +e.target.value })} />
