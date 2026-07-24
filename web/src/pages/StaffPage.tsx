@@ -93,7 +93,7 @@ export default function StaffPage() {
           <Input label="Year" type="number" value={salForm.periodYear} onChange={(e) => setSalForm({ ...salForm, periodYear: +e.target.value })} />
           <Input label="Advance" type="number" value={salForm.advance} onChange={(e) => setSalForm({ ...salForm, advance: +e.target.value })} />
           <Input label="Deductions" type="number" value={salForm.deductions} onChange={(e) => setSalForm({ ...salForm, deductions: +e.target.value })} />
-          <div className="col-span-2"><Input label="Net paid" type="number" value={salForm.netPaid} onChange={(e) => setSalForm({ ...salForm, netPaid: +e.target.value })} /></div>
+          <div className="lg:col-span-2"><Input label="Net paid" type="number" value={salForm.netPaid} onChange={(e) => setSalForm({ ...salForm, netPaid: +e.target.value })} /></div>
         </div>
         <p className="text-xs text-slate-400 mt-2">This also records a salary expense against the hostel.</p>
         <ErrorText>{error}</ErrorText>

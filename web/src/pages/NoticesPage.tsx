@@ -57,9 +57,9 @@ export default function NoticesPage() {
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </Select>
           <Select label="Type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>{TYPES.map((t) => <option key={t} value={t}>{titleCase(t)}</option>)}</Select>
-          <div className="col-span-2"><Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-          <div className="col-span-2"><Textarea label="Body" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} /></div>
-          <label className="flex items-center gap-2 text-sm col-span-2"><input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} /> Pin this notice</label>
+          <div className="lg:col-span-2"><Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Textarea label="Body" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} /></div>
+          <label className="flex items-center gap-2 text-sm lg:col-span-2"><input type="checkbox" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} /> Pin this notice</label>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={saving} onClick={save}>Publish</Button></div>

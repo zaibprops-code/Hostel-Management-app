@@ -110,7 +110,7 @@ export default function UsersPage() {
           <Input label="Email" type="email" value={form.email} disabled={!!editing} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Select label="Role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{titleCase(r)}</option>)}</Select>
-          {!editing && <div className="col-span-2"><Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>}
+          {!editing && <div className="lg:col-span-2"><Input label="Password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>}
         </div>
 
         <div className="mt-4">

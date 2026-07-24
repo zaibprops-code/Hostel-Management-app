@@ -48,7 +48,7 @@ export default function ReportsPage() {
               <Kpi label="Collected" value={formatPKR(rent.data.collected)} good />
               <Kpi label="Outstanding" value={formatPKR(rent.data.outstanding)} bad />
               <Kpi label="Overdue" value={formatPKR(rent.data.overdue)} bad />
-              <div className="col-span-2"><Kpi label="Collection Rate" value={`${rent.data.collectionRate}%`} /></div>
+              <div className="lg:col-span-2"><Kpi label="Collection Rate" value={`${rent.data.collectionRate}%`} /></div>
             </div>
           )}
         </Section>

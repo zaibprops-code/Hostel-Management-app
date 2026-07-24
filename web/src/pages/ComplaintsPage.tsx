@@ -70,8 +70,8 @@ export default function ComplaintsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}</Select>
-          <div className="col-span-2"><Input label="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
-          <div className="col-span-2"><Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Input label="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={saving} onClick={save}>Submit</Button></div>

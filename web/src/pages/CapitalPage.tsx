@@ -76,7 +76,7 @@ export default function CapitalPage() {
           <Input label="Amount" type="number" value={invForm.amount} onChange={(e) => setInvForm({ ...invForm, amount: +e.target.value })} />
           <Input label="Date" type="date" value={invForm.date} onChange={(e) => setInvForm({ ...invForm, date: e.target.value })} />
           <Input label="Source / Investor" value={invForm.source} onChange={(e) => setInvForm({ ...invForm, source: e.target.value })} />
-          <div className="col-span-2"><Textarea label="Purpose" value={invForm.purpose} onChange={(e) => setInvForm({ ...invForm, purpose: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Textarea label="Purpose" value={invForm.purpose} onChange={(e) => setInvForm({ ...invForm, purpose: e.target.value })} /></div>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={saveInv}>Save</Button></div>
@@ -88,7 +88,7 @@ export default function CapitalPage() {
           <Input label="Principal" type="number" value={loanForm.principal} onChange={(e) => setLoanForm({ ...loanForm, principal: +e.target.value })} />
           <Input label="Interest rate (%)" type="number" value={loanForm.interestRate} onChange={(e) => setLoanForm({ ...loanForm, interestRate: +e.target.value })} />
           <Input label="Date" type="date" value={loanForm.date} onChange={(e) => setLoanForm({ ...loanForm, date: e.target.value })} />
-          <div className="col-span-2"><Textarea label="Notes" value={loanForm.notes} onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Textarea label="Notes" value={loanForm.notes} onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })} /></div>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={saveLoan}>Save</Button></div>

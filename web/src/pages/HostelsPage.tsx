@@ -87,7 +87,7 @@ export default function HostelsPage() {
           <Input label="Notice period (days)" type="number" value={form.noticePeriodDays} onChange={(e) => setForm({ ...form, noticePeriodDays: +e.target.value })} />
           <Input label="Property rent (monthly)" type="number" value={form.propertyRent} onChange={(e) => setForm({ ...form, propertyRent: +e.target.value })} />
           <Input label="Property deposit" type="number" value={form.propertyDeposit} onChange={(e) => setForm({ ...form, propertyDeposit: +e.target.value })} />
-          <div className="col-span-2"><Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2">

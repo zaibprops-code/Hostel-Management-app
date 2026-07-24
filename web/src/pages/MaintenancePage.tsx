@@ -63,7 +63,7 @@ export default function MaintenancePage() {
           <Select label="Priority" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{["LOW", "MEDIUM", "HIGH", "URGENT"].map((p) => <option key={p} value={p}>{titleCase(p)}</option>)}</Select>
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <Input label="Room / location" value={form.roomLabel} onChange={(e) => setForm({ ...form, roomLabel: e.target.value })} />
-          <div className="col-span-2"><Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div className="lg:col-span-2"><Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <Input label="Estimated cost" type="number" value={form.estimatedCost} onChange={(e) => setForm({ ...form, estimatedCost: +e.target.value })} />
         </div>
         <ErrorText>{error}</ErrorText>
