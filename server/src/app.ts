@@ -28,6 +28,7 @@ import { auditRouter, notificationsRouter } from "./modules/misc";
 import portalRouter from "./modules/portal";
 import uploadsRouter from "./modules/uploads";
 import filesRouter from "./modules/files";
+import storageRouter from "./modules/storage";
 
 export function createApp() {
   const app = express();
@@ -102,6 +103,7 @@ export function createApp() {
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/portal", portalRouter);
   app.use("/api/uploads", uploadsRouter);
+  app.use("/api/storage", storageRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

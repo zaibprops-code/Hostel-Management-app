@@ -34,6 +34,10 @@ export const env = {
   // first business can always be created, even when sign-ups are disabled.
   allowSignup: process.env.ALLOW_SIGNUP !== "false",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
+  // Storage budget shown in the app's Storage screen (MB). Files are kept in
+  // the database, whose free Render tier is ~1 GB. Override with STORAGE_LIMIT_MB
+  // if you upgrade the database.
+  storageLimitMb: Number(process.env.STORAGE_LIMIT_MB ?? 1024),
   // Public address of the web app, used to build links in emails (e.g. the
   // password-reset link). Falls back to the CORS origin, then localhost.
   webAppUrl: process.env.WEB_APP_URL ?? process.env.CORS_ORIGIN ?? "http://localhost:5173",

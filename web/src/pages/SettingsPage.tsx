@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Input, ErrorText } from "../components/ui";
+
+function mb(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { data: storage } = useApi<any>("/storage");
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [msg, setMsg] = useState(""); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
 
@@ -50,6 +57,46 @@ export default function SettingsPage() {
             <Button type="submit" loading={saving}>Update Password</Button>
           </form>
         </Card>
+
+        {storage && (() => {
+          const pct = Math.min(100, Math.round((storage.dbBytes / storage.limitBytes) * 100));
+          const bar = pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
+          return (
+            <Card className="p-6 lg:col-span-2">
+              <h3 className="font-semibold text-slate-800 mb-1">Storage</h3>
+              <p className="text-sm text-slate-400 mb-4">Photos &amp; documents are stored in your database (about {mb(storage.limitBytes)} free).</p>
+
+              <div className="flex items-end justify-between mb-1.5">
+                <span className="text-2xl font-bold text-slate-900">{mb(storage.dbBytes)}</span>
+                <span className="text-sm text-slate-400">of {mb(storage.limitBytes)} used ({pct}%)</span>
+              </div>
+              <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(2, pct)}%` }} />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-400">Files stored</p>
+                  <p className="text-lg font-bold text-slate-800">{storage.fileCount.toLocaleString()}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-400">Files size</p>
+                  <p className="text-lg font-bold text-slate-800">{mb(storage.fileBytes)}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-400">Avg / file</p>
+                  <p className="text-lg font-bold text-slate-800">{storage.avgFileBytes ? mb(storage.avgFileBytes) : "—"}</p>
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-600 mt-4">
+                Room for roughly <b className="text-brand-600">{storage.estimatedFilesRemaining.toLocaleString()}</b> more photos/documents
+                {storage.avgFileBytes ? " at your current average size." : " (estimated at ~400 KB each)."}
+              </p>
+              {pct >= 80 && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">Storage is getting full. Let your developer know so more space can be added.</p>}
+            </Card>
+          );
+        })()}
       </div>
     </div>
   );
