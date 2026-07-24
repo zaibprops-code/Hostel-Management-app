@@ -30,7 +30,7 @@ export default function MaintenancePage() {
   return (
     <div>
       <PageHeader title="Maintenance" subtitle="Repair & maintenance tickets"
-        actions={<Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Ticket</Button>} />
+        actions={can("maintenance.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Ticket</Button>} />
 
       {!data?.length ? <EmptyState title="No tickets" icon={<IconMaintenance className="h-12 w-12" />} /> : (
         <div className="grid gap-3 md:grid-cols-2">

@@ -69,6 +69,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "expenses.manage",
     "income.view",
     "income.manage",
+    "finance.viewProfit", // manager is the all-round management role (no separate accountant)
     "food.view",
     "food.manage",
     "inventory.view",
@@ -76,6 +77,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "suppliers.view",
     "suppliers.manage",
     "staff.view",
+    "staff.manage", // manager handles staff & salaries
     "maintenance.view",
     "maintenance.manage",
     "complaints.view",
@@ -85,8 +87,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notices.view",
     "notices.manage",
     "reports.view",
-    // NOTE: finance.viewProfit, capital.view, deposits.refund, users.manage,
-    // audit.view and settings.manage are intentionally NOT granted by default.
+    // Owner-only (not granted to managers): capital.view/manage (owner's personal
+    // investment & loans), deposits.refund, users.manage, audit.view, settings.manage.
   ],
   ACCOUNTANT: [
     "dashboard.view",
@@ -111,11 +113,14 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "suppliers.view",
     "suppliers.manage",
     "expenses.view",
+    "expenses.manage", // kitchen records its own food/grocery expenses
   ],
   STAFF: [
     "dashboard.view",
     "maintenance.view",
+    "maintenance.manage", // on-site staff log/handle maintenance issues
     "complaints.view",
+    "complaints.manage", // on-site staff log/handle complaints
     "visitors.view",
     "visitors.manage",
     "notices.view",

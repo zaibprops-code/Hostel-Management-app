@@ -36,7 +36,7 @@ export default function ComplaintsPage() {
   return (
     <div>
       <PageHeader title="Complaints" subtitle="Resident complaints & resolution"
-        actions={<Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Complaint</Button>} />
+        actions={can("complaints.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Complaint</Button>} />
 
       {!data?.length ? <EmptyState title="No complaints" icon={<IconComplaint className="h-12 w-12" />} /> : (
         <div className="space-y-3">
