@@ -33,7 +33,7 @@ export const env = {
   // ALLOW_SIGNUP=false to lock the app to the existing businesses only. The very
   // first business can always be created, even when sign-ups are disabled.
   allowSignup: process.env.ALLOW_SIGNUP !== "false",
-  maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
+  maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 25),
   // Storage budget shown in the app's Storage screen (MB). Files are kept in
   // the database, whose free Render tier is ~1 GB. Override with STORAGE_LIMIT_MB
   // if you upgrade the database.

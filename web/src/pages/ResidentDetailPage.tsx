@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
-import { compressImage } from "../lib/image";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
@@ -33,14 +32,14 @@ export default function ResidentDetailPage() {
   async function uploadPhoto(file?: File) {
     if (!file) return;
     setUploading(true); setError("");
-    try { const fd = new FormData(); fd.append("file", await compressImage(file)); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
+    try { const fd = new FormData(); fd.append("file", file); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
     catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function uploadDoc() {
     if (!docForm.file) return;
     setUploading(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", await compressImage(docForm.file)); fd.append("type", docForm.type);
+      const fd = new FormData(); fd.append("file", docForm.file); fd.append("type", docForm.type);
       await api.post(`/uploads/resident/${id}/document`, fd);
       setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setUploading(false); }

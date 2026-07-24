@@ -6,7 +6,6 @@ import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate } from "../lib/format";
 import { IconAdmission, IconPlus, IconSearch } from "../components/icons";
-import { compressImage } from "../lib/image";
 
 // Document kinds a hostel typically keeps for a resident.
 const DOC_TYPES: [string, string][] = [
@@ -109,14 +108,14 @@ export default function AdmissionsPage() {
       const failures: string[] = [];
       if (photo) {
         try {
-          const fd = new FormData(); fd.append("file", await compressImage(photo));
+          const fd = new FormData(); fd.append("file", photo);
           await api.post(`/uploads/resident/${residentId}/photo`, fd);
         } catch { failures.push("profile picture"); }
       }
       for (const d of docs) {
         if (!d.file) continue;
         try {
-          const fd = new FormData(); fd.append("file", await compressImage(d.file)); fd.append("type", d.type);
+          const fd = new FormData(); fd.append("file", d.file); fd.append("type", d.type);
           await api.post(`/uploads/resident/${residentId}/document`, fd);
         } catch { failures.push(DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? "document"); }
       }
