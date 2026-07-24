@@ -10,7 +10,6 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import HostelsPage from "./pages/HostelsPage";
 import RoomsPage from "./pages/RoomsPage";
-import ResidentsPage from "./pages/ResidentsPage";
 import ResidentDetailPage from "./pages/ResidentDetailPage";
 import AdmissionsPage from "./pages/AdmissionsPage";
 import PaymentsPage from "./pages/PaymentsPage";
@@ -60,7 +59,9 @@ export default function App() {
         <Route path="/" element={<RoleHome loading={loading} isResident={user?.role === "RESIDENT"} />} />
         <Route path="/hostels" element={<Protected perm="hostels.view"><HostelsPage /></Protected>} />
         <Route path="/rooms" element={<Protected perm="rooms.view"><RoomsPage /></Protected>} />
-        <Route path="/residents" element={<Protected perm="residents.view"><ResidentsPage /></Protected>} />
+        {/* The standalone Residents list was merged into Admissions; /residents
+            redirects there, while the per-resident detail page stays. */}
+        <Route path="/residents" element={<Navigate to="/admissions" replace />} />
         <Route path="/residents/:id" element={<Protected perm="residents.view"><ResidentDetailPage /></Protected>} />
         <Route path="/admissions" element={<Protected perm="admissions.manage"><AdmissionsPage /></Protected>} />
         <Route path="/payments" element={<Protected perm="payments.view"><PaymentsPage /></Protected>} />

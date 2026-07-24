@@ -54,8 +54,7 @@ export default function DashboardPage() {
           {[
             { n: 1, to: "/hostels", title: "Add your hostel", desc: "Create your first hostel branch — name, address and monthly building rent.", icon: <IconHostel />, cta: "Go to Hostels" },
             { n: 2, to: "/rooms", title: "Add rooms & beds", desc: "Set up the floors, rooms and beds so you can assign residents to them.", icon: <IconBed />, cta: "Go to Rooms & Beds" },
-            { n: 3, to: "/residents", title: "Add residents", desc: "Create resident profiles for the people staying at your hostel.", icon: <IconResidents />, cta: "Go to Residents" },
-            { n: 4, to: "/admissions", title: "Admit & collect rent", desc: "Assign a resident to a bed, set their rent and record their first payment.", icon: <IconMoney />, cta: "Go to Admissions" },
+            { n: 3, to: "/admissions", title: "Admit residents & collect rent", desc: "Add a resident, assign them a bed, set their rent and record their first payment — all in one step.", icon: <IconResidents />, cta: "Go to Admissions" },
           ].map((s) => (
             <Card key={s.n} className="p-5">
               <div className="flex items-start gap-4">

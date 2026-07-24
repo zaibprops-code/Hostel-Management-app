@@ -20,8 +20,9 @@ const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: IconDashboard, perm: "dashboard.view" },
   { to: "/hostels", label: "Hostels", icon: IconHostel, perm: "hostels.view" },
   { to: "/rooms", label: "Rooms & Beds", icon: IconBed, perm: "rooms.view" },
-  { to: "/residents", label: "Residents", icon: IconResidents, perm: "residents.view" },
-  { to: "/admissions", label: "Admissions", icon: IconAdmission, perm: "admissions.manage" },
+  // Residents are registered & admitted from the Admissions screen (the old
+  // standalone "Residents" tab was merged into it).
+  { to: "/admissions", label: "Admissions", icon: IconResidents, perm: "admissions.manage" },
   { to: "/payments", label: "Payments", icon: IconMoney, perm: "payments.view" },
   { to: "/expenses", label: "Expenses", icon: IconExpense, perm: "expenses.view" },
   { to: "/income", label: "Income", icon: IconIncome, perm: "income.view" },
@@ -43,7 +44,7 @@ const NAV: NavItem[] = [
 ];
 
 // Order used to pick the phone bottom-bar tabs (first 4 the user can access).
-const MOBILE_PRIORITY = ["/", "/residents", "/payments", "/rooms", "/food", "/inventory", "/maintenance", "/complaints", "/reports", "/expenses", "/hostels", "/visitors"];
+const MOBILE_PRIORITY = ["/", "/admissions", "/payments", "/rooms", "/food", "/inventory", "/maintenance", "/complaints", "/reports", "/expenses", "/hostels", "/visitors"];
 
 export default function Layout() {
   const { user, logout, can } = useAuth();

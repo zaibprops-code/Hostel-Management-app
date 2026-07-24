@@ -57,7 +57,7 @@ export default function ResidentDetailPage() {
         subtitle={`${r.hostel.name} · ${r.bed ? `${r.bed.room.name} / ${r.bed.label}` : "No bed assigned"}`}
         actions={
           <div className="flex gap-2 flex-wrap">
-            <Link to="/residents" className="btn-secondary">← Back</Link>
+            <Link to="/admissions" className="btn-secondary">← Back</Link>
             {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
             {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
             {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
