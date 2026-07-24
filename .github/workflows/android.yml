@@ -82,9 +82,10 @@ jobs:
           name: Latest Android APK
           prerelease: true
           body: |
-            📱 **XYZ Hostel — Android app**
+            📱 **Hostel Manager — Android app (latest build)**
 
             Download `app-debug.apk` below and install it on any Android phone
             (you may need to allow "install from unknown sources").
-            On first launch, enter your hostel server address.
+            On first launch, enter your hostel server address, then log in.
+            This link always holds the newest version.
           files: web/android/app/build/outputs/apk/debug/app-debug.apk
