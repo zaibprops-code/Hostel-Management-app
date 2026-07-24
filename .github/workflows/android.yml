@@ -9,10 +9,20 @@ name: Build Android APK
 on:
   workflow_dispatch: # manual "Run workflow" button
   push:
-    tags: ["v*"] # or push a version tag like v1.0.0
+    branches: [main] # auto-build a fresh APK on every update to main
+    paths: # …but only when app code changes (skip docs-only commits)
+      - "web/**"
+      - "server/prisma/**"
+      - ".github/workflows/android.yml"
+    tags: ["v*"]
 
 permissions:
   contents: write
+
+# Only keep the newest build running; cancel older in-progress ones.
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
 
 jobs:
   build:
