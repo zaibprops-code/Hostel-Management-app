@@ -290,7 +290,7 @@ export default function AdmissionsPage() {
               </select>
               <label className="input flex-1 flex items-center cursor-pointer text-slate-500 truncate">
                 {d.file ? d.file.name : "Choose file…"}
-                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" className="hidden"
+                <input type="file" accept="*/*" className="hidden"
                   onChange={(e) => setDocs(docs.map((x, j) => j === i ? { ...x, file: e.target.files?.[0] ?? null } : x))} />
               </label>
               <button type="button" onClick={() => setDocs(docs.filter((_, j) => j !== i))} className="text-rose-600 text-sm font-medium px-2 self-center">Remove</button>
