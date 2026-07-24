@@ -31,9 +31,9 @@ router.get(
       freeBytes,
       avgFileBytes,
       // Rough number of extra files that still fit at the current average size.
-      // Before anything is uploaded, assume ~2.5 MB per file (full-resolution
-      // originals) so the estimate is realistic rather than optimistic.
-      estimatedFilesRemaining: Math.floor(freeBytes / (avgFileBytes || 2.5 * 1024 * 1024)),
+      // Before anything is uploaded, assume ~600 KB per file (compressed photo /
+      // high-quality document) so the estimate is realistic.
+      estimatedFilesRemaining: Math.floor(freeBytes / (avgFileBytes || 600 * 1024)),
     });
   })
 );

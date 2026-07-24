@@ -99,4 +99,39 @@ router.delete(
   })
 );
 
+// DELETE /api/uploads/resident/:id/photo — remove the profile picture
+router.delete(
+  "/resident/:id/photo",
+  requirePermission("residents.manage"),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    await removeStoredFile(resident.photoUrl);
+    await prisma.resident.update({ where: { id: resident.id }, data: { photoUrl: null } });
+    await audit({ userId: req.auth!.id, action: "resident.photo_delete", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId });
+    res.status(204).end();
+  })
+);
+
+// DELETE /api/uploads/resident/:id/files — archive: remove the photo AND every
+// document to free storage (after the owner has downloaded what they need).
+router.delete(
+  "/resident/:id/files",
+  requirePermission("residents.manage"),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { documents: true } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+
+    await removeStoredFile(resident.photoUrl);
+    for (const doc of resident.documents) await removeStoredFile(doc.fileUrl);
+    await prisma.residentDocument.deleteMany({ where: { residentId: resident.id } });
+    await prisma.resident.update({ where: { id: resident.id }, data: { photoUrl: null } });
+
+    await audit({ userId: req.auth!.id, action: "resident.files_archive", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, newValue: { removed: resident.documents.length + (resident.photoUrl ? 1 : 0) } });
+    res.json({ removed: resident.documents.length + (resident.photoUrl ? 1 : 0) });
+  })
+);
+
 export default router;

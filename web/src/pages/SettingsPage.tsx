@@ -91,7 +91,7 @@ export default function SettingsPage() {
 
               <p className="text-sm text-slate-600 mt-4">
                 Room for roughly <b className="text-brand-600">{storage.estimatedFilesRemaining.toLocaleString()}</b> more photos/documents
-                {storage.avgFileBytes ? " at your current average size." : " (estimated at full-quality ~2.5 MB each)."}
+                {storage.avgFileBytes ? " at your current average size." : " (estimated at ~600 KB each)."}
               </p>
               {pct >= 80 && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-3">Storage is getting full. Let your developer know so more space can be added.</p>}
             </Card>

@@ -4,6 +4,8 @@ import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import FileViewer from "../components/FileViewer";
+import { compressPhoto, compressDocument } from "../lib/image";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
 
 const DOC_TYPES: [string, string][] = [
@@ -28,25 +30,37 @@ export default function ResidentDetailPage() {
   const [docOpen, setDocOpen] = useState(false);
   const [docForm, setDocForm] = useState<{ type: string; file: File | null }>({ type: "CNIC_FRONT", file: null });
   const [uploading, setUploading] = useState(false);
+  // Which file is open in the full-screen viewer.
+  const [viewing, setViewing] = useState<null | { url: string; name: string; mime?: string | null; onDelete?: () => void }>(null);
 
   async function uploadPhoto(file?: File) {
     if (!file) return;
     setUploading(true); setError("");
-    try { const fd = new FormData(); fd.append("file", file); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
+    try { const fd = new FormData(); fd.append("file", await compressPhoto(file)); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
     catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function uploadDoc() {
     if (!docForm.file) return;
     setUploading(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", docForm.file); fd.append("type", docForm.type);
+      const fd = new FormData(); fd.append("file", await compressDocument(docForm.file)); fd.append("type", docForm.type);
       await api.post(`/uploads/resident/${id}/document`, fd);
       setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function deleteDoc(docId: string) {
     if (!confirm("Delete this document?")) return;
-    try { await api.delete(`/uploads/resident/document/${docId}`); await refetch(); }
+    try { await api.delete(`/uploads/resident/document/${docId}`); setViewing(null); await refetch(); }
+    catch (e) { alert(apiError(e)); }
+  }
+  async function deletePhoto() {
+    if (!confirm("Remove this resident's profile photo?")) return;
+    try { await api.delete(`/uploads/resident/${id}/photo`); setViewing(null); await refetch(); }
+    catch (e) { alert(apiError(e)); }
+  }
+  async function archiveFiles() {
+    if (!confirm("Archive will permanently DELETE this resident's photo and all documents from the server to free up space.\n\nMake sure you've downloaded anything you want to keep first. Continue?")) return;
+    try { const { data } = await api.delete(`/uploads/resident/${id}/files`); alert(`Archived. ${data.removed} file(s) removed to free space.`); await refetch(); }
     catch (e) { alert(apiError(e)); }
   }
 
@@ -110,9 +124,14 @@ export default function ResidentDetailPage() {
         {/* Left: profile */}
         <Card className="p-5 lg:col-span-1">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-16 w-16 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center text-xl font-bold overflow-hidden">
+            <button
+              type="button"
+              onClick={() => r.photoUrl && setViewing({ url: assetUrl(r.photoUrl), name: `${r.fullName} — photo.jpg`, mime: "image/jpeg", onDelete: can("residents.manage") ? deletePhoto : undefined })}
+              className="h-16 w-16 shrink-0 rounded-full bg-brand-100 text-brand-700 grid place-items-center text-xl font-bold overflow-hidden"
+              title={r.photoUrl ? "View photo" : ""}
+            >
               {r.photoUrl ? <img src={assetUrl(r.photoUrl)} alt={r.fullName} className="h-full w-full object-cover" /> : r.fullName.charAt(0)}
-            </div>
+            </button>
             <div className="min-w-0">
               <p className="font-semibold text-slate-900 truncate">{r.fullName}</p>
               <StatusBadge status={r.status} />
@@ -134,14 +153,19 @@ export default function ResidentDetailPage() {
             {!r.documents?.length ? <p className="text-xs text-slate-400">No documents uploaded.</p> : (
               <div className="space-y-1.5">
                 {r.documents.map((d: any) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2 text-sm rounded-lg bg-slate-50 px-3 py-2">
-                    <a href={assetUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-brand-600 hover:underline">
-                      {DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? titleCase(d.type)}
-                    </a>
-                    {can("residents.manage") && <button onClick={() => deleteDoc(d.id)} className="text-rose-500 text-xs shrink-0">Delete</button>}
-                  </div>
+                  <button
+                    key={d.id}
+                    onClick={() => setViewing({ url: assetUrl(d.fileUrl), name: d.fileName || `${DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? d.type}`, mime: d.mimeType, onDelete: can("residents.manage") ? () => deleteDoc(d.id) : undefined })}
+                    className="w-full flex items-center justify-between gap-2 text-sm rounded-lg bg-slate-50 hover:bg-slate-100 px-3 py-2 text-left"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? titleCase(d.type)}</span>
+                    <span className="text-brand-600 text-xs shrink-0">View →</span>
+                  </button>
                 ))}
               </div>
+            )}
+            {can("residents.manage") && (r.photoUrl || r.documents?.length > 0) && (
+              <button onClick={archiveFiles} className="mt-3 text-xs text-slate-400 hover:text-rose-600">Archive files (free up space)</button>
             )}
           </div>
           <dl className="space-y-2 text-sm">
@@ -242,6 +266,9 @@ export default function ResidentDetailPage() {
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPortal(false)}>Cancel</Button><Button loading={saving} onClick={createPortalAccess}>Create Login</Button></div>
         </div>
       </Modal>
+
+      {/* Full-screen photo / document viewer */}
+      {viewing && <FileViewer open={true} onClose={() => setViewing(null)} url={viewing.url} name={viewing.name} mime={viewing.mime} onDelete={viewing.onDelete} />}
 
       {/* Document upload modal */}
       <Modal open={docOpen} onClose={() => setDocOpen(false)} title="Add Document">
