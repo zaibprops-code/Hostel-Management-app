@@ -14,12 +14,24 @@ const DOC_TYPES: [string, string][] = [
   ["STUDENT_CARD", "Student card"], ["UNIVERSITY_CARD", "University card"], ["CONTRACT", "Contract"], ["OTHER", "Other"],
 ];
 
+const OCCUPANT_TYPES: [string, string][] = [
+  ["STUDENT", "Student"], ["PROFESSIONAL", "Working"], ["DAILY", "Daily guest"],
+];
+const OCCUPANT_LABEL: Record<string, string> = { STUDENT: "Student", PROFESSIONAL: "Professional", DAILY: "Daily guest" };
+
+function rentLabel(r: any): string {
+  return r.occupantType === "DAILY" ? `${formatPKR(r.dailyRate)}/day` : `${formatPKR(r.monthlyRent)}/mo`;
+}
+
 const EMPTY = {
   // resident details
-  hostelId: "", fullName: "", guardianName: "", phone: "", cnic: "", gender: "MALE", city: "", university: "", program: "",
+  hostelId: "", fullName: "", guardianName: "", phone: "", cnic: "", gender: "MALE", city: "",
+  occupantType: "STUDENT", university: "", program: "", company: "", occupation: "",
   // admission details
   bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0,
   rentDueDay: 1, contractMonths: 12, foodPlanId: "", initialPayment: 0, paymentMethod: "CASH",
+  // daily / short-stay
+  dailyRate: 0, nights: 1,
 };
 
 export default function AdmissionsPage() {
@@ -68,10 +80,10 @@ export default function AdmissionsPage() {
   const hostelBeds = beds.filter((b) => !form.hostelId || b.hostelId === form.hostelId);
   const selectedBed = beds.find((b) => b.id === form.bedId);
 
-  // Auto-fill rent/deposit when a bed is picked.
+  // Auto-fill rent/deposit when a bed is picked (also suggest a daily rate).
   useEffect(() => {
     const bed = beds.find((b) => b.id === form.bedId);
-    if (bed) setForm((f: any) => ({ ...f, monthlyRent: bed.monthlyRent, depositAmount: f.depositAmount || bed.monthlyRent }));
+    if (bed) setForm((f: any) => ({ ...f, monthlyRent: bed.monthlyRent, depositAmount: f.depositAmount || bed.monthlyRent, dailyRate: f.dailyRate || Math.round(bed.monthlyRent / 30) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.bedId]);
 
@@ -89,12 +101,15 @@ export default function AdmissionsPage() {
       const payload = {
         resident: {
           fullName: form.fullName, guardianName: form.guardianName, gender: form.gender,
-          phone: form.phone, cnic: form.cnic, city: form.city, university: form.university, program: form.program,
+          phone: form.phone, cnic: form.cnic, city: form.city, occupantType: form.occupantType,
+          university: form.university, program: form.program, company: form.company, occupation: form.occupation,
         },
         hostelId: form.hostelId || hostels[0]?.id,
         bedId: form.bedId || undefined,
         admissionDate: form.admissionDate,
         monthlyRent: form.monthlyRent,
+        dailyRate: form.dailyRate,
+        nights: form.nights,
         depositAmount: form.depositAmount,
         rentDueDay: form.rentDueDay,
         contractMonths: form.contractMonths,
@@ -167,7 +182,7 @@ export default function AdmissionsPage() {
                     <p className="font-semibold text-slate-800 truncate">{r.fullName}</p>
                     <StatusBadge status={r.status} />
                   </div>
-                  <p className="text-xs text-slate-400 truncate">{r.room ? `${r.room} · ${r.bed}` : "No bed"} · {formatPKR(r.monthlyRent)}/mo</p>
+                  <p className="text-xs text-slate-400 truncate">{r.room ? `${r.room} · ${r.bed}` : "No bed"} · {rentLabel(r)}{r.occupantType === "DAILY" ? " · Daily" : ""}</p>
                 </div>
               </Link>
             ))}
@@ -187,11 +202,11 @@ export default function AdmissionsPage() {
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="td">
                       <p className="font-medium text-slate-800">{r.fullName}</p>
-                      <p className="text-xs text-slate-400">{r.phone ?? "—"}</p>
+                      <p className="text-xs text-slate-400">{OCCUPANT_LABEL[r.occupantType] ?? "Student"}{r.phone ? ` · ${r.phone}` : ""}</p>
                     </td>
                     <td className="td">{r.hostel.name}</td>
                     <td className="td">{r.room ? `${r.room} · ${r.bed}` : "—"}</td>
-                    <td className="td">{formatPKR(r.monthlyRent)}</td>
+                    <td className="td">{rentLabel(r)}</td>
                     <td className="td">{formatDate(r.checkInDate)}</td>
                     <td className="td"><StatusBadge status={r.status} /></td>
                     <td className="td text-right"><Link to={`/residents/${r.id}`} className="text-brand-600 font-medium hover:underline">View</Link></td>
@@ -227,8 +242,21 @@ export default function AdmissionsPage() {
           </div>
         </div>
 
+        {/* --- Occupant type --- */}
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Who is staying?</p>
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {OCCUPANT_TYPES.map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setForm({ ...form, occupantType: v })}
+              className={`rounded-xl border px-2 py-2.5 text-sm font-medium ${form.occupantType === v ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+
         {/* --- Resident details --- */}
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">Resident details</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+          {form.occupantType === "DAILY" ? "Guest details" : "Resident details"}
+        </p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
@@ -237,12 +265,22 @@ export default function AdmissionsPage() {
             <option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
           </Select>
           <Input label="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} />
-          <Input label="Guardian name" value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
+          <Input label={form.occupantType === "DAILY" ? "Next of kin" : "Guardian name"} value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
           <Input label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <Input label="CNIC" value={form.cnic} onChange={(e) => setForm({ ...form, cnic: e.target.value })} />
           <Input label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-          <Input label="University" value={form.university} onChange={(e) => setForm({ ...form, university: e.target.value })} />
-          <Input label="Program / Degree" value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })} />
+          {form.occupantType === "STUDENT" && (
+            <>
+              <Input label="University" value={form.university} onChange={(e) => setForm({ ...form, university: e.target.value })} />
+              <Input label="Program / Degree" value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })} />
+            </>
+          )}
+          {form.occupantType === "PROFESSIONAL" && (
+            <>
+              <Input label="Company / Organisation" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
+              <Input label="Occupation / Designation" value={form.occupation} onChange={(e) => setForm({ ...form, occupation: e.target.value })} />
+            </>
+          )}
         </div>
 
         {/* --- Admission / bed assignment --- */}
@@ -257,16 +295,31 @@ export default function AdmissionsPage() {
 
           {form.bedId && (
             <>
-              <Input label="Admission date" type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} />
-              <Input label="Rent due day" type="number" value={form.rentDueDay} onChange={(e) => setForm({ ...form, rentDueDay: +e.target.value })} />
-              <Input label="Monthly rent" type="number" value={form.monthlyRent} onChange={(e) => setForm({ ...form, monthlyRent: +e.target.value })} />
+              <Input label={form.occupantType === "DAILY" ? "Check-in date" : "Admission date"} type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} />
+
+              {form.occupantType === "DAILY" ? (
+                <>
+                  <Input label="Daily rate" type="number" value={form.dailyRate} onChange={(e) => setForm({ ...form, dailyRate: +e.target.value })} />
+                  <Input label="Number of nights" type="number" value={form.nights} onChange={(e) => setForm({ ...form, nights: Math.max(1, +e.target.value) })} />
+                  <div className="lg:col-span-2 rounded-xl bg-brand-50 p-3 text-sm flex justify-between">
+                    <span className="text-slate-600">Total for stay ({form.nights} night{form.nights > 1 ? "s" : ""})</span>
+                    <span className="font-bold text-brand-700">{formatPKR((form.dailyRate || 0) * (form.nights || 0))}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Input label="Rent due day" type="number" value={form.rentDueDay} onChange={(e) => setForm({ ...form, rentDueDay: +e.target.value })} />
+                  <Input label="Monthly rent" type="number" value={form.monthlyRent} onChange={(e) => setForm({ ...form, monthlyRent: +e.target.value })} />
+                  <Input label="Contract (months)" type="number" value={form.contractMonths} onChange={(e) => setForm({ ...form, contractMonths: +e.target.value })} />
+                </>
+              )}
+
               <Input label="Security deposit" type="number" value={form.depositAmount} onChange={(e) => setForm({ ...form, depositAmount: +e.target.value })} />
-              <Input label="Contract (months)" type="number" value={form.contractMonths} onChange={(e) => setForm({ ...form, contractMonths: +e.target.value })} />
               <Select label="Food plan" value={form.foodPlanId} onChange={(e) => setForm({ ...form, foodPlanId: e.target.value })}>
                 <option value="">None</option>
                 {plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({formatPKR(p.monthlyCost)})</option>)}
               </Select>
-              <Input label="Initial payment" type="number" value={form.initialPayment} onChange={(e) => setForm({ ...form, initialPayment: +e.target.value })} />
+              <Input label={form.occupantType === "DAILY" ? "Amount paid now" : "Initial payment"} type="number" value={form.initialPayment} onChange={(e) => setForm({ ...form, initialPayment: +e.target.value })} />
               <Select label="Payment method" value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
                 {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD"].map((m) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
               </Select>

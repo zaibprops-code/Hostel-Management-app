@@ -61,6 +61,7 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     where: {
       status: "ACTIVE",
       admissionDate: { not: null },
+      occupantType: { not: "DAILY" }, // daily guests are billed once for their stay
       ...(hostelIds ? { hostelId: { in: hostelIds } } : {}),
     },
   });

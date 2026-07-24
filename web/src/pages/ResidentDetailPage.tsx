@@ -169,7 +169,17 @@ export default function ResidentDetailPage() {
             )}
           </div>
           <dl className="space-y-2 text-sm">
-            {[["Guardian", r.guardianName], ["Phone", r.phone], ["CNIC", r.cnic], ["City", r.city], ["University", r.university], ["Program", r.program], ["Food Plan", r.foodPlan?.name], ["Admission", formatDate(r.admissionDate)], ["Monthly Rent", formatPKR(r.monthlyRent)]].map(([k, v]) => (
+            {[
+              ["Type", { STUDENT: "Student", PROFESSIONAL: "Professional", DAILY: "Daily guest" }[r.occupantType as string] ?? "Student"],
+              ["Guardian", r.guardianName], ["Phone", r.phone], ["CNIC", r.cnic], ["City", r.city],
+              ...(r.occupantType === "STUDENT" ? [["University", r.university], ["Program", r.program]] : []),
+              ...(r.occupantType === "PROFESSIONAL" ? [["Company", r.company], ["Occupation", r.occupation]] : []),
+              ["Food Plan", r.foodPlan?.name],
+              ["Admission", formatDate(r.admissionDate)],
+              ...(r.occupantType === "DAILY"
+                ? [["Daily Rate", formatPKR(r.dailyRate)], ["Expected checkout", r.expectedCheckout ? formatDate(r.expectedCheckout) : "—"]]
+                : [["Monthly Rent", formatPKR(r.monthlyRent)]]),
+            ].map(([k, v]) => (
               <div key={k as string} className="flex justify-between gap-2">
                 <dt className="text-slate-400">{k}</dt>
                 <dd className="font-medium text-slate-700 text-right">{v || "—"}</dd>

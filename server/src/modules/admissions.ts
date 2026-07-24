@@ -20,8 +20,11 @@ const residentDetails = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   city: z.string().optional(),
-  university: z.string().optional(),
-  program: z.string().optional(),
+  occupantType: z.enum(["STUDENT", "PROFESSIONAL", "DAILY"]).default("STUDENT"),
+  university: z.string().optional(), // students
+  program: z.string().optional(), // students
+  company: z.string().optional(), // professionals
+  occupation: z.string().optional(), // professionals
 });
 
 const admissionSchema = z
@@ -33,6 +36,9 @@ const admissionSchema = z
     bedId: z.string().optional(), // optional: leave empty to just register the resident
     admissionDate: z.coerce.date(),
     monthlyRent: z.coerce.number().min(0).default(0),
+    // Daily / short-stay billing
+    dailyRate: z.coerce.number().min(0).default(0),
+    nights: z.coerce.number().int().min(1).default(1),
     depositAmount: z.coerce.number().min(0).default(0),
     rentDueDay: z.coerce.number().int().min(1).max(28).default(1),
     contractMonths: z.coerce.number().int().min(0).optional(),
@@ -78,6 +84,15 @@ router.post(
       if (bed && existing.bedId) throw conflict("This resident is already assigned to a bed");
     }
 
+    // Billing basis. Students & professionals pay monthly rent; daily guests pay
+    // (daily rate × nights) as a single stay charge and get an expected checkout.
+    const occupantType = body.resident?.occupantType ?? (existing as any)?.occupantType ?? "STUDENT";
+    const isDaily = occupantType === "DAILY";
+    const nights = Math.max(1, body.nights || 1);
+    const stayTotal = (body.dailyRate || 0) * nights;
+    const chargeAmount = isDaily ? stayTotal : body.monthlyRent;
+    const expectedCheckout = isDaily ? new Date(body.admissionDate.getTime() + nights * 86400000) : null;
+
     const result = await prisma.$transaction(async (tx) => {
       // 0. Create the resident inline if we weren't given an existing one.
       let residentId = body.residentId ?? "";
@@ -102,8 +117,10 @@ router.post(
           status: "ACTIVE",
           admissionDate: body.admissionDate,
           checkInDate: body.admissionDate,
-          monthlyRent: body.monthlyRent,
-          contractMonths: body.contractMonths,
+          monthlyRent: isDaily ? 0 : body.monthlyRent,
+          dailyRate: isDaily ? body.dailyRate : null,
+          expectedCheckout,
+          contractMonths: isDaily ? null : body.contractMonths,
           foodPlanId: body.foodPlanId,
         },
       });
@@ -118,22 +135,22 @@ router.post(
           residentId,
           bedId: bed.id,
           admissionDate: body.admissionDate,
-          monthlyRent: body.monthlyRent,
+          monthlyRent: chargeAmount, // for daily this is the total stay cost
           depositAmount: body.depositAmount,
-          rentDueDay: body.rentDueDay,
-          contractMonths: body.contractMonths,
+          rentDueDay: isDaily ? body.admissionDate.getDate() : body.rentDueDay,
+          contractMonths: isDaily ? null : body.contractMonths,
           notes: body.notes,
         },
       });
 
-      // 4. First month's rent charge
+      // 4. Rent charge — one month for long-term, one stay total for daily guests
       const charge = await ensureRentCharge(tx, {
         hostelId: bed.hostelId,
         residentId,
         year: body.admissionDate.getFullYear(),
         month: body.admissionDate.getMonth() + 1,
-        amount: body.monthlyRent,
-        dueDay: body.rentDueDay,
+        amount: chargeAmount,
+        dueDay: isDaily ? body.admissionDate.getDate() : body.rentDueDay,
       });
 
       // 5. Security deposit (kept separate from revenue)

@@ -26,9 +26,11 @@ const residentSchema = z.object({
   emergencyName: z.string().optional(),
   emergencyPhone: z.string().optional(),
   emergencyRelation: z.string().optional(),
+  occupantType: z.enum(["STUDENT", "PROFESSIONAL", "DAILY"]).optional(),
   university: z.string().optional(),
   program: z.string().optional(),
   company: z.string().optional(),
+  occupation: z.string().optional(),
   studentId: z.string().optional(),
 });
 
@@ -74,6 +76,8 @@ router.get(
         id: r.id,
         fullName: r.fullName,
         photoUrl: r.photoUrl,
+        occupantType: r.occupantType,
+        dailyRate: dec(r.dailyRate),
         phone: r.phone,
         cnic: r.cnic,
         status: r.status,
@@ -119,6 +123,7 @@ router.get(
     res.json({
       ...resident,
       monthlyRent: dec(resident.monthlyRent),
+      dailyRate: dec(resident.dailyRate),
       outstanding: Math.max(0, outstanding),
       deposit: resident.deposit
         ? {

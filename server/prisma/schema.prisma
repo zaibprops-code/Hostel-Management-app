@@ -40,6 +40,14 @@ enum ResidentStatus {
   BLACKLISTED
 }
 
+// Who is staying: a student, a working professional, or a short-stay (daily)
+// guest. Drives which fields are collected and how rent is billed.
+enum OccupantType {
+  STUDENT
+  PROFESSIONAL
+  DAILY
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -415,14 +423,17 @@ model Resident {
   emergencyPhone  String?
   emergencyRelation String?
 
+  occupantType OccupantType @default(STUDENT)
   university   String?
   program      String?
-  company      String?
+  company      String? // employer / organisation (professionals)
+  occupation   String? // job title / designation (professionals)
   studentId    String?
 
   admissionDate DateTime?
   checkInDate   DateTime?
   monthlyRent   Decimal        @default(0) @db.Decimal(12, 2)
+  dailyRate     Decimal?       @db.Decimal(12, 2) // for DAILY occupants
   contractMonths Int?
   foodPlanId    String?
   status        ResidentStatus @default(ACTIVE)
