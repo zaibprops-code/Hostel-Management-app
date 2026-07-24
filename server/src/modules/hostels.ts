@@ -56,6 +56,22 @@ router.get(
   })
 );
 
+// GET /api/hostels/accessible — minimal list of hostels the user may work with.
+// Available to ANY authenticated user (managers, accountants, kitchen, staff)
+// so hostel dropdowns and the hostel switcher work regardless of hostels.view.
+router.get(
+  "/accessible",
+  asyncHandler(async (req, res) => {
+    const ids = await accessibleHostelIds(req);
+    const hostels = await prisma.hostel.findMany({
+      where: { id: { in: ids } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, code: true, city: true },
+    });
+    res.json(hostels);
+  })
+);
+
 // GET /api/hostels/:id
 router.get(
   "/:id",

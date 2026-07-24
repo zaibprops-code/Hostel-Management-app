@@ -24,7 +24,16 @@ interface Dashboard {
 
 export default function DashboardPage() {
   const { user, can } = useAuth();
-  const { selected, scopeParam } = useHostels();
+  const { selected, scopeParam, hostels } = useHostels();
+
+  // Accurate subtitle for any role: named hostel when there's one in view,
+  // otherwise a company-wide summary.
+  const dashboardSubtitle =
+    selected !== "all"
+      ? hostels.find((h) => h.id === selected)?.name ?? "Hostel overview"
+      : hostels.length === 1
+      ? hostels[0].name
+      : `All hostels (${hostels.length})`;
   const { data, loading } = useApi<Dashboard>(withQuery("/dashboard", scopeParam), [scopeParam]);
 
   const k = data?.kpis;
@@ -73,7 +82,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title={`Good day, ${user?.name.split(" ")[0]} 👋`}
-        subtitle={selected === "all" ? "Company-wide overview" : "Hostel overview"}
+        subtitle={dashboardSubtitle}
       />
 
       {/* KPI grid */}

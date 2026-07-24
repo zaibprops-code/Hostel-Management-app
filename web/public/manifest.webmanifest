@@ -1,6 +1,6 @@
 {
-  "name": "XYZ Hostel Group Management",
-  "short_name": "Hostel MS",
+  "name": "Hostel Manager",
+  "short_name": "Hostel Manager",
   "description": "Professional hostel management platform",
   "start_url": "/",
   "display": "standalone",

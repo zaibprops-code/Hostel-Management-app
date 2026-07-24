@@ -1,7 +1,8 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, notFound } from "../lib/http";
+import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec } from "../lib/query";
@@ -183,6 +184,34 @@ router.patch(
     const resident = await prisma.resident.update({ where: { id: before.id }, data: { status: req.body.status } });
     await audit({ userId: req.auth!.id, action: "resident.status", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, oldValue: { status: before.status }, newValue: { status: req.body.status } });
     res.json(resident);
+  })
+);
+
+// POST /api/residents/:id/portal-access — give a resident their own login so
+// they can use the resident self-service portal.
+router.post(
+  "/:id/portal-access",
+  requirePermission("residents.manage"),
+  validateBody(z.object({ email: z.string().email().toLowerCase().optional(), password: z.string().min(8) })),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    if (resident.userId) throw badRequest("This resident already has a portal login");
+
+    const email = (req.body.email as string | undefined) || resident.email || undefined;
+    if (!email) throw badRequest("An email address is required to create a login");
+
+    const clash = await prisma.user.findUnique({ where: { email } });
+    if (clash) throw badRequest("A user with this email already exists");
+
+    const passwordHash = await bcrypt.hash(req.body.password, 10);
+    const user = await prisma.user.create({
+      data: { companyId: req.auth!.companyId, name: resident.fullName, email, passwordHash, role: "RESIDENT" },
+    });
+    await prisma.resident.update({ where: { id: resident.id }, data: { userId: user.id, email } });
+    await audit({ userId: req.auth!.id, action: "resident.portal_access", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId });
+    res.status(201).json({ email });
   })
 );
 

@@ -38,7 +38,8 @@ const NAV: NavItem[] = [
   { to: "/reports", label: "Reports", icon: IconReport, perm: "reports.view" },
   { to: "/users", label: "Users", icon: IconUsers, perm: "users.manage" },
   { to: "/audit", label: "Audit Logs", icon: IconAudit, perm: "audit.view" },
-  { to: "/settings", label: "Settings", icon: IconSettings, perm: "settings.manage" },
+  // Settings (profile + change password) is available to every signed-in staff role.
+  { to: "/settings", label: "Settings", icon: IconSettings, perm: "dashboard.view" },
 ];
 
 export default function Layout() {
@@ -66,7 +67,7 @@ export default function Layout() {
         <div className="flex h-16 items-center gap-2 border-b border-slate-800 px-5">
           <span className="text-2xl">🏨</span>
           <div>
-            <p className="text-sm font-bold text-white leading-tight">{user?.company.name ?? "Hostel MS"}</p>
+            <p className="text-sm font-bold text-white leading-tight">{user?.company.name ?? "Hostel Manager"}</p>
             <p className="text-[11px] text-slate-400">Management Platform</p>
           </div>
         </div>
@@ -100,7 +101,7 @@ export default function Layout() {
             <button className="btn-ghost lg:hidden p-2" onClick={() => setOpen(true)}>
               <IconMenu />
             </button>
-            {hostels.length > 0 && can("hostels.view") && (
+            {hostels.length > 1 && (
               <select
                 value={selected}
                 onChange={(e) => setSelected(e.target.value as string)}

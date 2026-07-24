@@ -79,7 +79,7 @@ export default function App() {
         <Route path="/reports" element={<Protected perm="reports.view"><ReportsPage /></Protected>} />
         <Route path="/users" element={<Protected perm="users.manage"><UsersPage /></Protected>} />
         <Route path="/audit" element={<Protected perm="audit.view"><AuditPage /></Protected>} />
-        <Route path="/settings" element={<Protected perm="settings.manage"><SettingsPage /></Protected>} />
+        <Route path="/settings" element={<Protected perm="dashboard.view"><SettingsPage /></Protected>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

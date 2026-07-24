@@ -17,6 +17,17 @@ export default function ResidentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [payForm, setPayForm] = useState<any>({ amount: 0, method: "CASH", reference: "" });
   const [coForm, setCoForm] = useState<any>({ checkoutDate: new Date().toISOString().slice(0, 10), damageCharges: 0, otherCharges: 0, inspectionNotes: "" });
+  const [portal, setPortal] = useState(false);
+  const [portalForm, setPortalForm] = useState<any>({ email: "", password: "" });
+  const [portalDone, setPortalDone] = useState("");
+
+  async function createPortalAccess() {
+    setSaving(true); setError("");
+    try {
+      const { data } = await api.post(`/residents/${id}/portal-access`, { email: portalForm.email || undefined, password: portalForm.password });
+      setPortalDone(data.email); setPortal(false); await refetch();
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
 
   async function recordPayment() {
     setSaving(true); setError("");
@@ -49,10 +60,22 @@ export default function ResidentDetailPage() {
             <Link to="/residents" className="btn-secondary">← Back</Link>
             {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
             {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
+            {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
             {can("residents.manage") && active && <Button variant="danger" onClick={() => setCheckout(true)}>Checkout</Button>}
           </div>
         }
       />
+
+      {portalDone && (
+        <Card className="p-4 mb-4 bg-emerald-50 border-emerald-100">
+          <p className="text-sm text-emerald-800">✅ Portal login created for <b>{portalDone}</b>. The resident can now sign in with that email and the password you set.</p>
+        </Card>
+      )}
+      {r.userId && !portalDone && (
+        <Card className="p-3 mb-4 bg-slate-50">
+          <p className="text-sm text-slate-600">🔑 This resident has a portal login ({r.email}).</p>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Left: profile */}
@@ -130,6 +153,18 @@ export default function ResidentDetailPage() {
           <p className="text-xs text-slate-400">Payment is auto-allocated to the oldest outstanding rent first.</p>
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPay(false)}>Cancel</Button><Button loading={saving} onClick={recordPayment}>Save Payment</Button></div>
+        </div>
+      </Modal>
+
+      {/* Portal login modal */}
+      <Modal open={portal} onClose={() => setPortal(false)} title="Create Portal Login">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Give {r.fullName} their own login to view rent, payments, notices and raise complaints.</p>
+          <Input label="Login email" type="email" value={portalForm.email} onChange={(e) => setPortalForm({ ...portalForm, email: e.target.value })} placeholder="resident@email.com" />
+          <Input label="Set a password" type="password" value={portalForm.password} onChange={(e) => setPortalForm({ ...portalForm, password: e.target.value })} minLength={8} />
+          <p className="text-xs text-slate-400">Share these details with the resident. They can change the password later.</p>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPortal(false)}>Cancel</Button><Button loading={saving} onClick={createPortalAccess}>Create Login</Button></div>
         </div>
       </Modal>
 

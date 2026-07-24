@@ -29,13 +29,17 @@ export function HostelProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function reload() {
-    if (!user || !user.permissions.includes("hostels.view")) {
+    // Residents use the separate portal; everyone else needs their hostel list
+    // (for the switcher and for hostel dropdowns in create forms).
+    if (!user || user.role === "RESIDENT") {
       setLoading(false);
       return;
     }
     try {
-      const { data } = await api.get("/hostels");
+      const { data } = await api.get("/hostels/accessible");
       setHostels(data);
+    } catch {
+      setHostels([]);
     } finally {
       setLoading(false);
     }
