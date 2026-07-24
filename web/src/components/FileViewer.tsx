@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
+import { isNativeApp } from "../lib/api";
 
 interface Props {
   open: boolean;
@@ -35,7 +36,17 @@ export default function FileViewer({ open, onClose, url, name, mime, onDelete }:
         {isImage ? (
           <img src={url} alt={name} className="max-h-full max-w-full object-contain rounded-lg" />
         ) : isPdf ? (
-          <iframe src={url} title={name} className="w-full h-full bg-white rounded-lg" />
+          isNativeApp() ? (
+            // Android's WebView can't render a remote PDF inline — offer to open/save it.
+            <div className="text-center text-slate-200">
+              <div className="text-6xl mb-3">📄</div>
+              <p className="mb-1 font-medium break-all px-6">{name}</p>
+              <p className="text-sm text-slate-400 mb-4">PDF document</p>
+              <button onClick={doDownload} disabled={!!busy} className="btn-primary">{busy === "download" ? "Opening…" : "Download / Open PDF"}</button>
+            </div>
+          ) : (
+            <iframe src={url} title={name} className="w-full h-full bg-white rounded-lg" />
+          )
         ) : (
           <div className="text-center text-slate-200">
             <p className="mb-3">Preview isn't available for this file type.</p>

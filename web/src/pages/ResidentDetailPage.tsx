@@ -280,7 +280,7 @@ export default function ResidentDetailPage() {
             <span className="label">File (image or PDF)</span>
             <label className="input flex items-center cursor-pointer text-slate-500 truncate">
               {docForm.file ? docForm.file.name : "Choose file…"}
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setDocForm({ ...docForm, file: e.target.files?.[0] ?? null })} />
+              <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={(e) => setDocForm({ ...docForm, file: e.target.files?.[0] ?? null })} />
             </label>
           </label>
           <ErrorText>{error}</ErrorText>
