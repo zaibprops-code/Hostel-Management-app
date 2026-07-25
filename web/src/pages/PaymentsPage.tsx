@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
@@ -6,8 +6,10 @@ import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressDocument } from "../lib/image";
+import { elementToPng } from "../lib/capture";
+import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 import { StatCard } from "../components/stats";
-import { formatPKR, formatDate, titleCase } from "../lib/format";
+import { formatPKR, formatDate, formatDateTime, titleCase, amountInWords } from "../lib/format";
 import { IconMoney } from "../components/icons";
 
 export default function PaymentsPage() {
@@ -18,9 +20,22 @@ export default function PaymentsPage() {
   const { data: outstanding } = useApi<any[]>(withQuery("/payments/reports/outstanding", scopeParam), [scopeParam]);
   const [receipt, setReceipt] = useState<any>(null);
   const [viewing, setViewing] = useState<null | { url: string; name: string; mime?: string | null }>(null);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const [receiptBusy, setReceiptBusy] = useState<"" | "save" | "share">("");
 
   async function viewReceipt(id: string) {
     try { const { data } = await api.get(`/payments/${id}/receipt`); setReceipt(data); } catch (e) { alert(apiError(e)); }
+  }
+  async function exportReceipt(mode: "save" | "share") {
+    if (!receiptRef.current) return;
+    setReceiptBusy(mode);
+    try {
+      const png = await elementToPng(receiptRef.current);
+      const name = `Receipt-${(receipt.resident || "resident").replace(/\s+/g, "_")}-${String(receipt.id).slice(-6)}.png`;
+      if (mode === "save") await downloadFile(png, name);
+      else await shareFile(png, name);
+    } catch { alert("Could not create the receipt image. Please try again."); }
+    finally { setReceiptBusy(""); }
   }
   async function uploadProof(id: string, file?: File) {
     if (!file) return;
@@ -118,35 +133,89 @@ export default function PaymentsPage() {
 
       <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Payment Receipt">
         {receipt && (
-          <div id="receipt" className="text-sm">
-            <div className="text-center border-b border-dashed border-slate-200 pb-3 mb-3">
-              <p className="text-lg font-bold">{receipt.company}</p>
-              <p className="text-slate-500">{receipt.hostel}</p>
-              <p className="text-xs text-slate-400 mt-1">Receipt #{receipt.id.slice(-8).toUpperCase()}</p>
-            </div>
-            <div className="space-y-1.5">
-              {[["Resident", receipt.resident], ["Room / Bed", `${receipt.room ?? "—"} / ${receipt.bed ?? "—"}`], ["Method", titleCase(receipt.method)], ["Reference", receipt.reference ?? "—"], ["Date", formatDate(receipt.paidAt)]].map(([k, v]) => (
-                <div key={k} className="flex justify-between"><span className="text-slate-400">{k}</span><span className="font-medium">{v}</span></div>
-              ))}
-            </div>
-            {receipt.allocations?.length > 0 && (
-              <div className="mt-3 border-t border-dashed border-slate-200 pt-3">
-                <p className="text-xs font-semibold text-slate-500 mb-1">Applied to</p>
-                {receipt.allocations.map((a: any, i: number) => (
-                  <div key={i} className="flex justify-between text-xs"><span>{a.period}</span><span>{formatPKR(a.amount)}</span></div>
-                ))}
+          <>
+            {/* The receipt itself — captured as an image for Save/Share */}
+            <div ref={receiptRef} className="bg-white text-slate-800 p-5 rounded-xl border border-slate-100">
+              <div className="text-center border-b-2 border-brand-600 pb-3 mb-3">
+                <p className="text-xl font-extrabold text-brand-700 leading-tight">{receipt.company}</p>
+                <p className="font-semibold text-slate-700">{receipt.hostel}</p>
+                {(receipt.hostelAddress || receipt.hostelCity) && <p className="text-xs text-slate-500">{[receipt.hostelAddress, receipt.hostelCity].filter(Boolean).join(", ")}</p>}
+                {receipt.hostelPhone && <p className="text-xs text-slate-500">☎ {receipt.hostelPhone}</p>}
               </div>
-            )}
-            <div className="mt-3 border-t-2 border-slate-800 pt-3 flex justify-between text-lg font-bold">
-              <span>Total Paid</span><span>{formatPKR(receipt.amount)}</span>
+
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="text-sm font-bold tracking-wide text-slate-700">PAYMENT RECEIPT</p>
+                  <p className="text-xs text-slate-400">No. {String(receipt.id).slice(-8).toUpperCase()}</p>
+                </div>
+                <span className={`rounded-md px-2.5 py-1 text-xs font-bold border ${receipt.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+                  {receipt.status === "COMPLETED" ? "PAID" : titleCase(receipt.status)}
+                </span>
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-3 text-sm space-y-1.5 mb-3">
+                <RRow k="Received from" v={receipt.resident} />
+                {receipt.residentPhone && <RRow k="Phone" v={receipt.residentPhone} />}
+                {receipt.residentCnic && <RRow k="CNIC" v={receipt.residentCnic} />}
+                <RRow k="Room / Bed" v={`${receipt.room ?? "—"} / ${receipt.bed ?? "—"}`} />
+                <RRow k="Date & time" v={formatDateTime(receipt.paidAt)} />
+                <RRow k="Method" v={titleCase(receipt.method)} />
+                {receipt.reference && <RRow k="Reference" v={receipt.reference} />}
+              </div>
+
+              {receipt.allocations?.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-semibold text-slate-500 mb-1">Applied to rent</p>
+                  <div className="rounded-lg border border-slate-100 divide-y divide-slate-100">
+                    {receipt.allocations.map((a: any, i: number) => (
+                      <div key={i} className="flex justify-between px-3 py-1.5 text-sm"><span className="text-slate-600">{a.period}</span><span className="font-medium">{formatPKR(a.amount)}</span></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg bg-brand-600 text-white px-3 py-2.5 flex items-center justify-between">
+                <span className="font-semibold">Amount Paid</span>
+                <span className="text-xl font-extrabold">{formatPKR(receipt.amount)}</span>
+              </div>
+              <p className="text-xs text-slate-500 italic mt-1 mb-3">{amountInWords(receipt.amount)}</p>
+
+              <div className="flex justify-between text-sm mb-4">
+                <span className="text-slate-500">Balance remaining</span>
+                <span className={receipt.outstanding > 0 ? "font-semibold text-rose-600" : "font-semibold text-emerald-600"}>{formatPKR(receipt.outstanding)}</span>
+              </div>
+
+              <div className="flex items-end justify-between pt-3 border-t border-dashed border-slate-200">
+                <div className="text-xs text-slate-500">
+                  <p>Received by</p>
+                  <p className="font-medium text-slate-700 mt-0.5">{receipt.receivedBy ?? "—"}</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-28 border-b border-slate-400 mb-1" />
+                  <p className="text-xs text-slate-400">Signature / Stamp</p>
+                </div>
+              </div>
+              <p className="text-center text-[10px] text-slate-400 mt-3">Thank you! This is a computer-generated receipt.</p>
             </div>
-            <div className="mt-5 flex justify-end gap-2 print:hidden">
+
+            <div className="mt-4 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setReceipt(null)}>Close</Button>
-              <Button onClick={() => window.print()}>Print</Button>
+              <Button variant="secondary" loading={receiptBusy === "save"} onClick={() => exportReceipt("save")}>⬇ Save</Button>
+              {canShareFiles() && <Button loading={receiptBusy === "share"} onClick={() => exportReceipt("share")}>↗ Share</Button>}
             </div>
-          </div>
+          </>
         )}
       </Modal>
+    </div>
+  );
+}
+
+// One label/value row on the receipt.
+function RRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-slate-400 shrink-0">{k}</span>
+      <span className="font-medium text-right break-words">{v}</span>
     </div>
   );
 }

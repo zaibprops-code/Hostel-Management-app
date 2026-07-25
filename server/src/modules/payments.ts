@@ -133,18 +133,34 @@ router.get(
     const payment = await prisma.payment.findUnique({
       where: { id: req.params.id },
       include: {
-        resident: { include: { bed: { include: { room: true } } } },
+        resident: { include: { bed: { include: { room: true } }, rentCharges: true } },
         hostel: { include: { company: true } },
         allocations: { include: { rentCharge: true } },
       },
     });
     if (!payment) throw notFound("Payment not found");
     await assertHostelAccess(req, payment.hostelId);
+
+    const receiver = payment.receivedById
+      ? await prisma.user.findUnique({ where: { id: payment.receivedById }, select: { name: true } })
+      : null;
+    const outstanding = payment.resident.rentCharges.reduce(
+      (s, c) => s + Math.max(0, dec(c.amount) - dec(c.discount) - dec(c.amountPaid)),
+      0
+    );
+
     res.json({
       id: payment.id,
       company: payment.hostel.company.name,
+      companyLogo: payment.hostel.company.logoUrl,
       hostel: payment.hostel.name,
+      hostelAddress: payment.hostel.address,
+      hostelCity: payment.hostel.city,
+      hostelPhone: payment.hostel.contactNumber,
       resident: payment.resident.fullName,
+      residentPhone: payment.resident.phone,
+      residentCnic: payment.resident.cnic,
+      occupantType: payment.resident.occupantType,
       room: payment.resident.bed?.room.name,
       bed: payment.resident.bed?.label,
       amount: dec(payment.amount),
@@ -152,6 +168,8 @@ router.get(
       reference: payment.reference,
       paidAt: payment.paidAt,
       status: payment.status,
+      receivedBy: receiver?.name ?? null,
+      outstanding: Math.max(0, outstanding),
       allocations: payment.allocations.map((a) => ({
         amount: dec(a.amount),
         period: a.rentCharge ? `${a.rentCharge.periodMonth}/${a.rentCharge.periodYear}` : "Advance",
