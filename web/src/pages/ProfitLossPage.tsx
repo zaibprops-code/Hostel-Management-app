@@ -6,17 +6,19 @@ import { StatCard, CHART_COLORS } from "../components/stats";
 import { formatPKR, titleCase } from "../lib/format";
 import { IconChart } from "../components/icons";
 
-export default function ProfitLossPage() {
+export default function ProfitLossPage({ embedded }: { embedded?: boolean } = {}) {
   const { scopeParam } = useHostels();
   const { data: pl, loading } = useApi<any>(withQuery("/reports/profit-loss", scopeParam), [scopeParam]);
   const { data: comparison } = useApi<any[]>(withQuery("/reports/hostel-comparison", scopeParam), [scopeParam]);
 
   if (loading) return <PageLoader />;
-  if (!pl) return <EmptyState title="No financial data" />;
+  if (!pl) return embedded ? null : <EmptyState title="No financial data" />;
 
   return (
     <div>
-      <PageHeader title="Profit & Loss" subtitle="Security deposits, owner investment & loans are excluded from profit." />
+      {embedded
+        ? <h2 className="text-lg font-bold text-slate-900 mb-4">Profit & Loss</h2>
+        : <PageHeader title="Profit & Loss" subtitle="Security deposits, owner investment & loans are excluded from profit." />}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-6">
         <StatCard label="Total Revenue" value={formatPKR(pl.totalRevenue)} sub={`Rent ${formatPKR(pl.rentRevenue)} + Other ${formatPKR(pl.otherIncome)}`} icon={<IconChart />} accent="emerald" />

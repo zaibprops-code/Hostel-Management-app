@@ -15,11 +15,9 @@ import AdmissionsPage from "./pages/AdmissionsPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import IncomePage from "./pages/IncomePage";
-import ProfitLossPage from "./pages/ProfitLossPage";
 import CapitalPage from "./pages/CapitalPage";
 import FoodPage from "./pages/FoodPage";
 import InventoryPage from "./pages/InventoryPage";
-import SuppliersPage from "./pages/SuppliersPage";
 import StaffPage from "./pages/StaffPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import ComplaintsPage from "./pages/ComplaintsPage";
@@ -67,11 +65,12 @@ export default function App() {
         <Route path="/payments" element={<Protected perm="payments.view"><PaymentsPage /></Protected>} />
         <Route path="/expenses" element={<Protected perm="expenses.view"><ExpensesPage /></Protected>} />
         <Route path="/income" element={<Protected perm="income.view"><IncomePage /></Protected>} />
-        <Route path="/profit-loss" element={<Protected perm="finance.viewProfit"><ProfitLossPage /></Protected>} />
+        {/* Profit & Loss now lives inside Reports; Suppliers inside Inventory. */}
+        <Route path="/profit-loss" element={<Navigate to="/reports" replace />} />
         <Route path="/capital" element={<Protected perm="capital.view"><CapitalPage /></Protected>} />
         <Route path="/food" element={<Protected perm="food.view"><FoodPage /></Protected>} />
         <Route path="/inventory" element={<Protected perm="inventory.view"><InventoryPage /></Protected>} />
-        <Route path="/suppliers" element={<Protected perm="suppliers.view"><SuppliersPage /></Protected>} />
+        <Route path="/suppliers" element={<Navigate to="/inventory" replace />} />
         <Route path="/staff" element={<Protected perm="staff.view"><StaffPage /></Protected>} />
         <Route path="/maintenance" element={<Protected perm="maintenance.view"><MaintenancePage /></Protected>} />
         <Route path="/complaints" element={<Protected perm="complaints.view"><ComplaintsPage /></Protected>} />

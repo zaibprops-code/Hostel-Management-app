@@ -28,7 +28,7 @@ export default function IncomePage() {
 
   return (
     <div>
-      <PageHeader title="Income" subtitle="Non-rent revenue streams"
+      <PageHeader title="Other Income" subtitle="Non-rent revenue streams"
         actions={can("income.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Income</Button>} />
 
       <div className="mb-4"><StatCard label="Total Income (non-rent)" value={formatPKR(data?.totalAmount)} icon={<IconIncome />} accent="emerald" /></div>

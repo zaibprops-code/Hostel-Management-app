@@ -54,7 +54,7 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <PageHeader title="Payments" subtitle="Rent collection & receipt register" />
+      <PageHeader title="Rent Payments" subtitle="Rent collection & receipt register" />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <StatCard label="Total Collected" value={formatPKR(data?.totalCollected)} icon={<IconMoney />} accent="emerald" />

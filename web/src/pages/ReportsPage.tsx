@@ -5,6 +5,7 @@ import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, PageLoader } from "../components/ui";
 import { formatPKR, titleCase } from "../lib/format";
 import { IconReport } from "../components/icons";
+import ProfitLossPage from "./ProfitLossPage";
 
 function toCsv(rows: Record<string, any>[]): string {
   if (!rows.length) return "";
@@ -35,6 +36,12 @@ export default function ReportsPage() {
   return (
     <div>
       <PageHeader title="Reports" subtitle="Operational & financial reports" />
+
+      {can("finance.viewProfit") && (
+        <div className="mb-6 pb-6 border-b border-slate-200">
+          <ProfitLossPage embedded />
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Occupancy" onExport={() => download("occupancy.csv", occ.data ?? [])}>

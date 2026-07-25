@@ -7,7 +7,7 @@ import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, 
 import { formatPKR } from "../lib/format";
 import { IconSupplier, IconPlus } from "../components/icons";
 
-export default function SuppliersPage() {
+export default function SuppliersPage({ embedded }: { embedded?: boolean } = {}) {
   const { can } = useAuth();
   const { hostels, scopeParam } = useHostels();
   const { data, loading, refetch } = useApi<any[]>(withQuery("/suppliers", scopeParam), [scopeParam]);
@@ -24,8 +24,15 @@ export default function SuppliersPage() {
 
   return (
     <div>
-      <PageHeader title="Suppliers" subtitle="Vendors & payment terms"
-        actions={can("suppliers.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Supplier</Button>} />
+      {embedded ? (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-900">Suppliers</h2>
+          {can("suppliers.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Supplier</Button>}
+        </div>
+      ) : (
+        <PageHeader title="Suppliers" subtitle="Vendors & payment terms"
+          actions={can("suppliers.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Supplier</Button>} />
+      )}
 
       {!data?.length ? <EmptyState title="No suppliers" icon={<IconSupplier className="h-12 w-12" />} /> : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -14,33 +14,42 @@ interface NavItem {
   label: string;
   icon: (p: { className?: string }) => JSX.Element;
   perm: string;
+  group: string;
 }
 
+// Navigation is organised into sections so the menu reads as clear groups
+// rather than a wall of icons. Order here is the display order.
+const GROUPS = ["Overview", "Property", "People", "Money", "Kitchen & Stock", "Operations", "Admin"];
+
 const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: IconDashboard, perm: "dashboard.view" },
-  { to: "/hostels", label: "Hostels", icon: IconHostel, perm: "hostels.view" },
-  { to: "/rooms", label: "Rooms & Beds", icon: IconBed, perm: "rooms.view" },
-  // The people hub: lists all residents/guests and holds the "New Admission"
-  // button. (Route stays /admissions; the tab is just named "Residents".)
-  { to: "/admissions", label: "Residents", icon: IconResidents, perm: "admissions.manage" },
-  { to: "/payments", label: "Payments", icon: IconMoney, perm: "payments.view" },
-  { to: "/expenses", label: "Expenses", icon: IconExpense, perm: "expenses.view" },
-  { to: "/income", label: "Income", icon: IconIncome, perm: "income.view" },
-  { to: "/profit-loss", label: "Profit & Loss", icon: IconChart, perm: "finance.viewProfit" },
-  { to: "/capital", label: "Capital & Loans", icon: IconMoney, perm: "capital.view" },
-  { to: "/food", label: "Food & Kitchen", icon: IconFood, perm: "food.view" },
-  { to: "/inventory", label: "Inventory", icon: IconInventory, perm: "inventory.view" },
-  { to: "/suppliers", label: "Suppliers", icon: IconSupplier, perm: "suppliers.view" },
-  { to: "/staff", label: "Staff", icon: IconStaff, perm: "staff.view" },
-  { to: "/maintenance", label: "Maintenance", icon: IconMaintenance, perm: "maintenance.view" },
-  { to: "/complaints", label: "Complaints", icon: IconComplaint, perm: "complaints.view" },
-  { to: "/visitors", label: "Visitors", icon: IconVisitor, perm: "visitors.view" },
-  { to: "/notices", label: "Notices", icon: IconNotice, perm: "notices.view" },
-  { to: "/reports", label: "Reports", icon: IconReport, perm: "reports.view" },
-  { to: "/users", label: "Users", icon: IconUsers, perm: "users.manage" },
-  { to: "/audit", label: "Audit Logs", icon: IconAudit, perm: "audit.view" },
+  { to: "/", label: "Dashboard", icon: IconDashboard, perm: "dashboard.view", group: "Overview" },
+  { to: "/reports", label: "Reports", icon: IconReport, perm: "reports.view", group: "Overview" },
+
+  { to: "/hostels", label: "Hostels", icon: IconHostel, perm: "hostels.view", group: "Property" },
+  { to: "/rooms", label: "Rooms & Beds", icon: IconBed, perm: "rooms.view", group: "Property" },
+
+  // The people hub: lists all residents/guests and holds "New Admission".
+  { to: "/admissions", label: "Residents", icon: IconResidents, perm: "admissions.manage", group: "People" },
+  { to: "/visitors", label: "Visitors", icon: IconVisitor, perm: "visitors.view", group: "People" },
+  { to: "/staff", label: "Staff", icon: IconStaff, perm: "staff.view", group: "People" },
+  { to: "/users", label: "Users", icon: IconUsers, perm: "users.manage", group: "People" },
+
+  { to: "/payments", label: "Rent Payments", icon: IconMoney, perm: "payments.view", group: "Money" },
+  { to: "/income", label: "Other Income", icon: IconIncome, perm: "income.view", group: "Money" },
+  { to: "/expenses", label: "Expenses", icon: IconExpense, perm: "expenses.view", group: "Money" },
+  { to: "/capital", label: "Capital & Loans", icon: IconMoney, perm: "capital.view", group: "Money" },
+
+  // Suppliers is folded into Inventory; Profit & Loss is folded into Reports.
+  { to: "/food", label: "Food & Kitchen", icon: IconFood, perm: "food.view", group: "Kitchen & Stock" },
+  { to: "/inventory", label: "Inventory", icon: IconInventory, perm: "inventory.view", group: "Kitchen & Stock" },
+
+  { to: "/maintenance", label: "Maintenance", icon: IconMaintenance, perm: "maintenance.view", group: "Operations" },
+  { to: "/complaints", label: "Complaints", icon: IconComplaint, perm: "complaints.view", group: "Operations" },
+  { to: "/notices", label: "Notices", icon: IconNotice, perm: "notices.view", group: "Operations" },
+
+  { to: "/audit", label: "Audit Logs", icon: IconAudit, perm: "audit.view", group: "Admin" },
   // Settings (profile + change password) is available to every signed-in staff role.
-  { to: "/settings", label: "Settings", icon: IconSettings, perm: "dashboard.view" },
+  { to: "/settings", label: "Settings", icon: IconSettings, perm: "dashboard.view", group: "Admin" },
 ];
 
 // Order used to pick the phone bottom-bar tabs (first 4 the user can access).
@@ -54,6 +63,9 @@ export default function Layout() {
   const [more, setMore] = useState(false);
 
   const items = NAV.filter((n) => can(n.perm));
+  const grouped = GROUPS
+    .map((group) => ({ group, list: items.filter((i) => i.group === group) }))
+    .filter((g) => g.list.length > 0);
 
   // Bottom bar = up to 4 priority destinations, then a "More" tab.
   const bottomItems = MOBILE_PRIORITY
@@ -82,22 +94,29 @@ export default function Layout() {
             <p className="text-[11px] text-slate-400">Management Platform</p>
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) =>
-                clsx(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  isActive ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                )
-              }
-            >
-              <item.icon className="h-[18px] w-[18px]" />
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+          {grouped.map(({ group, list }) => (
+            <div key={group}>
+              <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{group}</p>
+              <div className="space-y-0.5">
+                {list.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/"}
+                    className={({ isActive }) =>
+                      clsx(
+                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                        isActive ? "bg-brand-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      )
+                    }
+                  >
+                    <item.icon className="h-[18px] w-[18px]" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </aside>
@@ -181,23 +200,30 @@ export default function Layout() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 p-4">
-              {items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === "/"}
-                  onClick={() => setMore(false)}
-                  className={({ isActive }) =>
-                    clsx(
-                      "flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3 text-center",
-                      isActive ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"
-                    )
-                  }
-                >
-                  <item.icon className="h-6 w-6" />
-                  <span className="text-[11px] font-medium leading-tight">{item.label}</span>
-                </NavLink>
+            <div className="p-4 space-y-4">
+              {grouped.map(({ group, list }) => (
+                <div key={group}>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {list.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === "/"}
+                        onClick={() => setMore(false)}
+                        className={({ isActive }) =>
+                          clsx(
+                            "flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-3 text-center",
+                            isActive ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-slate-600"
+                          )
+                        }
+                      >
+                        <item.icon className="h-6 w-6" />
+                        <span className="text-[11px] font-medium leading-tight">{item.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
             <div className="p-4 pt-0">

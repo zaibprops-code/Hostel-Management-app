@@ -7,9 +7,11 @@ import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Badge, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconInventory, IconPlus } from "../components/icons";
+import SuppliersPage from "./SuppliersPage";
 
 export default function InventoryPage() {
   const { can } = useAuth();
+  const [tab, setTab] = useState<"items" | "suppliers">("items");
   const { hostels, scopeParam } = useHostels();
   const { data, loading, refetch } = useApi<any[]>(withQuery("/inventory", scopeParam), [scopeParam]);
   const [open, setOpen] = useState(false);
@@ -34,9 +36,21 @@ export default function InventoryPage() {
   return (
     <div>
       <PageHeader title="Inventory" subtitle={lowCount ? `${lowCount} item(s) low on stock` : "Kitchen & grocery stock"}
-        actions={can("inventory.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Item</Button>} />
+        actions={tab === "items" && can("inventory.manage") && <Button onClick={() => { setForm({ ...form, hostelId: hostels[0]?.id ?? "" }); setOpen(true); }}><IconPlus className="h-4 w-4" /> New Item</Button>} />
 
-      {!data?.length ? <EmptyState title="No inventory items" icon={<IconInventory className="h-12 w-12" />} /> : (
+      {can("suppliers.view") && (
+        <div className="flex gap-2 mb-4">
+          {(["items", "suppliers"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={clsx("rounded-lg px-3.5 py-1.5 text-sm font-medium border", tab === t ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600")}>
+              {t === "items" ? "Stock items" : "Suppliers"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === "suppliers" ? <SuppliersPage embedded /> : (
+      !data?.length ? <EmptyState title="No inventory items" icon={<IconInventory className="h-12 w-12" />} /> : (
         <Card className="overflow-hidden">
           <div className="lg:hidden divide-y divide-slate-100">
             {data.map((i) => (
@@ -71,7 +85,7 @@ export default function InventoryPage() {
             </table>
           </div>
         </Card>
-      )}
+      ))}
 
       <Modal open={open} onClose={() => setOpen(false)} title="New Inventory Item">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
