@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
-import { hostelScope, dec } from "../lib/query";
+import { hostelScope, dec, fileMimes } from "../lib/query";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -120,6 +120,7 @@ router.get(
       (sum, c) => sum + (dec(c.amount) - dec(c.discount) - dec(c.amountPaid)),
       0
     );
+    const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
 
     res.json({
       ...resident,
@@ -140,7 +141,7 @@ router.get(
         amountPaid: dec(c.amountPaid),
         balance: Math.max(0, dec(c.amount) - dec(c.discount) - dec(c.amountPaid)),
       })),
-      payments: resident.payments.map((p) => ({ ...p, amount: dec(p.amount) })),
+      payments: resident.payments.map((p) => ({ ...p, amount: dec(p.amount), proofMime: p.proofUrl ? proofMimes[p.proofUrl] ?? null : null })),
     });
   })
 );

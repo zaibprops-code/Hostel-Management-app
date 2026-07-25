@@ -23,6 +23,7 @@ export default function ResidentDetailPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [payForm, setPayForm] = useState<any>({ amount: 0, method: "CASH", reference: "" });
+  const [payProof, setPayProof] = useState<File | null>(null);
   const [coForm, setCoForm] = useState<any>({ checkoutDate: new Date().toISOString().slice(0, 10), damageCharges: 0, otherCharges: 0, inspectionNotes: "" });
   const [portal, setPortal] = useState(false);
   const [portalForm, setPortalForm] = useState<any>({ email: "", password: "" });
@@ -74,8 +75,19 @@ export default function ResidentDetailPage() {
 
   async function recordPayment() {
     setSaving(true); setError("");
-    try { await api.post("/payments", { residentId: id, ...payForm }); setPay(false); setPayForm({ amount: 0, method: "CASH", reference: "" }); await refetch(); }
-    catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try {
+      const { data } = await api.post("/payments", { residentId: id, ...payForm });
+      if (payProof && data?.id) {
+        const fd = new FormData(); fd.append("file", await compressDocument(payProof));
+        await api.post(`/uploads/payment/${data.id}/proof`, fd).catch(() => {});
+      }
+      setPay(false); setPayForm({ amount: 0, method: "CASH", reference: "" }); setPayProof(null); await refetch();
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+  async function uploadPaymentProof(paymentId: string, file?: File) {
+    if (!file) return;
+    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${paymentId}/proof`, fd); await refetch(); }
+    catch (e) { alert(apiError(e)); }
   }
   async function giveNotice() {
     setSaving(true); setError("");
@@ -240,9 +252,18 @@ export default function ResidentDetailPage() {
             {!r.payments.length ? <p className="text-sm text-slate-400">No payments recorded.</p> : (
               <div className="divide-y divide-slate-100">
                 {r.payments.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between py-2 text-sm">
-                    <span>{titleCase(p.method)} · {formatDate(p.paidAt)}</span>
-                    <span className="font-semibold text-emerald-600">{formatPKR(p.amount)}</span>
+                  <div key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-slate-700 truncate">{titleCase(p.method)} · {formatDate(p.paidAt)}{p.reference ? ` · ${p.reference}` : ""}</p>
+                      {p.proofUrl ? (
+                        <button onClick={() => setViewing({ url: assetUrl(p.proofUrl), name: `Receipt — ${r.fullName} — ${formatDate(p.paidAt)}`, mime: p.proofMime })} className="text-xs text-brand-600 font-medium">📎 View receipt</button>
+                      ) : can("payments.manage") ? (
+                        <label className="text-xs text-slate-400 cursor-pointer hover:text-brand-600">＋ Attach receipt
+                          <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => uploadPaymentProof(p.id, e.target.files?.[0])} />
+                        </label>
+                      ) : null}
+                    </div>
+                    <span className="font-semibold text-emerald-600 shrink-0">{formatPKR(p.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -258,10 +279,17 @@ export default function ResidentDetailPage() {
           <Select label="Method" value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}>
             {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
           </Select>
-          <Input label="Reference (optional)" value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} />
+          <Input label="Reference / transaction ID (optional)" value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} />
+          <label className="block">
+            <span className="label">Payment proof / receipt (optional)</span>
+            <label className="input flex items-center cursor-pointer text-slate-500 truncate">
+              {payProof ? payProof.name : "Attach transfer screenshot or PDF…"}
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setPayProof(e.target.files?.[0] ?? null)} />
+            </label>
+          </label>
           <p className="text-xs text-slate-400">Payment is auto-allocated to the oldest outstanding rent first.</p>
           <ErrorText>{error}</ErrorText>
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPay(false)}>Cancel</Button><Button loading={saving} onClick={recordPayment}>Save Payment</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => { setPay(false); setPayProof(null); }}>Cancel</Button><Button loading={saving} onClick={recordPayment}>Save Payment</Button></div>
         </div>
       </Modal>
 

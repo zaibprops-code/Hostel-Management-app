@@ -127,6 +127,41 @@ router.delete(
   })
 );
 
+// POST /api/uploads/payment/:id/proof — attach a transfer receipt / screenshot
+router.post(
+  "/payment/:id/proof",
+  requirePermission("payments.manage"),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest("No file uploaded");
+    if (!resolveType(req.file)) throw badRequest("Please upload an image or a PDF");
+    const payment = await prisma.payment.findUnique({ where: { id: req.params.id } });
+    if (!payment) throw notFound("Payment not found");
+    await assertHostelAccess(req, payment.hostelId);
+
+    await removeStoredFile(payment.proofUrl); // replace any previous proof
+    const proofUrl = await storeFile(req.file);
+    await prisma.payment.update({ where: { id: payment.id }, data: { proofUrl } });
+    await audit({ userId: req.auth!.id, action: "payment.proof", entity: "Payment", entityId: payment.id, hostelId: payment.hostelId });
+    res.status(201).json({ proofUrl });
+  })
+);
+
+// DELETE /api/uploads/payment/:id/proof — remove a payment's proof
+router.delete(
+  "/payment/:id/proof",
+  requirePermission("payments.manage"),
+  asyncHandler(async (req, res) => {
+    const payment = await prisma.payment.findUnique({ where: { id: req.params.id } });
+    if (!payment) throw notFound("Payment not found");
+    await assertHostelAccess(req, payment.hostelId);
+    await removeStoredFile(payment.proofUrl);
+    await prisma.payment.update({ where: { id: payment.id }, data: { proofUrl: null } });
+    await audit({ userId: req.auth!.id, action: "payment.proof_delete", entity: "Payment", entityId: payment.id, hostelId: payment.hostelId });
+    res.status(204).end();
+  })
+);
+
 // DELETE /api/uploads/resident/:id/files — archive: remove the photo AND every
 // document to free storage (after the owner has downloaded what they need).
 router.delete(

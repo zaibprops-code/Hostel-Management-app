@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler, badRequest, forbidden, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
-import { hostelScope, dec } from "../lib/query";
+import { hostelScope, dec, fileMimes } from "../lib/query";
 import { hasPermission } from "../lib/permissions";
 import { computeStatus } from "../lib/rent";
 import { audit } from "../lib/audit";
@@ -33,6 +33,7 @@ router.get(
       prisma.payment.aggregate({ where: { ...where, status: "COMPLETED" }, _sum: { amount: true } }),
     ]);
 
+    const mimes = await fileMimes(payments.map((p) => p.proofUrl));
     res.json({
       total,
       page,
@@ -43,6 +44,8 @@ router.get(
         amount: dec(p.amount),
         method: p.method,
         reference: p.reference,
+        proofUrl: p.proofUrl,
+        proofMime: p.proofUrl ? mimes[p.proofUrl] ?? null : null,
         paidAt: p.paidAt,
         status: p.status,
         notes: p.notes,

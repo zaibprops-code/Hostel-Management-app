@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { api, apiError } from "../lib/api";
+import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import FileViewer from "../components/FileViewer";
+import { compressDocument } from "../lib/image";
 import { StatCard } from "../components/stats";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
 import { IconMoney } from "../components/icons";
@@ -15,9 +17,15 @@ export default function PaymentsPage() {
   const { data, loading, refetch } = useApi<any>(withQuery("/payments", scopeParam, `page=${page}`), [page, scopeParam]);
   const { data: outstanding } = useApi<any[]>(withQuery("/payments/reports/outstanding", scopeParam), [scopeParam]);
   const [receipt, setReceipt] = useState<any>(null);
+  const [viewing, setViewing] = useState<null | { url: string; name: string; mime?: string | null }>(null);
 
   async function viewReceipt(id: string) {
     try { const { data } = await api.get(`/payments/${id}/receipt`); setReceipt(data); } catch (e) { alert(apiError(e)); }
+  }
+  async function uploadProof(id: string, file?: File) {
+    if (!file) return;
+    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${id}/proof`, fd); await refetch(); }
+    catch (e) { alert(apiError(e)); }
   }
   async function voidPayment(id: string) {
     const reason = prompt("Reason for voiding this payment?");
@@ -54,8 +62,13 @@ export default function PaymentsPage() {
                   <p className="text-xs text-slate-400">{titleCase(p.method)} · {formatDate(p.paidAt)}</p>
                   <StatusBadge status={p.status} />
                 </div>
-                <div className="flex gap-4 mt-2">
+                <div className="flex gap-4 mt-2 items-center">
                   <button onClick={() => viewReceipt(p.id)} className="text-brand-600 text-sm font-medium">Receipt</button>
+                  {p.proofUrl ? (
+                    <button onClick={() => setViewing({ url: assetUrl(p.proofUrl), name: `Proof — ${p.resident.fullName} — ${formatDate(p.paidAt)}`, mime: p.proofMime })} className="text-slate-600 text-sm font-medium">📎 Proof</button>
+                  ) : can("payments.manage") ? (
+                    <label className="text-slate-400 text-sm cursor-pointer">＋ Proof<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => uploadProof(p.id, e.target.files?.[0])} /></label>
+                  ) : null}
                   {can("payments.manage") && p.status === "COMPLETED" && <button onClick={() => voidPayment(p.id)} className="text-rose-600 text-sm font-medium">Void</button>}
                 </div>
               </div>
@@ -79,6 +92,11 @@ export default function PaymentsPage() {
                     <td className="td"><StatusBadge status={p.status} /></td>
                     <td className="td text-right whitespace-nowrap">
                       <button onClick={() => viewReceipt(p.id)} className="text-brand-600 hover:underline text-sm mr-3">Receipt</button>
+                      {p.proofUrl ? (
+                        <button onClick={() => setViewing({ url: assetUrl(p.proofUrl), name: `Proof — ${p.resident.fullName} — ${formatDate(p.paidAt)}`, mime: p.proofMime })} className="text-slate-600 hover:underline text-sm mr-3">Proof</button>
+                      ) : can("payments.manage") ? (
+                        <label className="text-slate-400 hover:underline text-sm mr-3 cursor-pointer">＋Proof<input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => uploadProof(p.id, e.target.files?.[0])} /></label>
+                      ) : null}
                       {can("payments.manage") && p.status === "COMPLETED" && <button onClick={() => voidPayment(p.id)} className="text-rose-600 hover:underline text-sm">Void</button>}
                     </td>
                   </tr>
@@ -95,6 +113,8 @@ export default function PaymentsPage() {
           </div>
         </Card>
       )}
+
+      {viewing && <FileViewer open={true} onClose={() => setViewing(null)} url={viewing.url} name={viewing.name} mime={viewing.mime} />}
 
       <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Payment Receipt">
         {receipt && (

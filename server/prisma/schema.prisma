@@ -546,6 +546,7 @@ model Payment {
   amount      Decimal       @db.Decimal(12, 2)
   method      PaymentMethod
   reference   String?
+  proofUrl    String?       // uploaded proof of payment (transfer screenshot / receipt)
   paidAt      DateTime      @default(now())
   receivedById String?
   status      PaymentStatus @default(COMPLETED)
