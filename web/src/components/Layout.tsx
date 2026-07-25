@@ -20,9 +20,9 @@ const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: IconDashboard, perm: "dashboard.view" },
   { to: "/hostels", label: "Hostels", icon: IconHostel, perm: "hostels.view" },
   { to: "/rooms", label: "Rooms & Beds", icon: IconBed, perm: "rooms.view" },
-  // Residents are registered & admitted from the Admissions screen (the old
-  // standalone "Residents" tab was merged into it).
-  { to: "/admissions", label: "Admissions", icon: IconResidents, perm: "admissions.manage" },
+  // The people hub: lists all residents/guests and holds the "New Admission"
+  // button. (Route stays /admissions; the tab is just named "Residents".)
+  { to: "/admissions", label: "Residents", icon: IconResidents, perm: "admissions.manage" },
   { to: "/payments", label: "Payments", icon: IconMoney, perm: "payments.view" },
   { to: "/expenses", label: "Expenses", icon: IconExpense, perm: "expenses.view" },
   { to: "/income", label: "Income", icon: IconIncome, perm: "income.view" },

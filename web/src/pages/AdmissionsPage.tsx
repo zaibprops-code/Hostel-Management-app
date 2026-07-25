@@ -160,8 +160,8 @@ export default function AdmissionsPage() {
   return (
     <div>
       <PageHeader
-        title="Admissions"
-        subtitle={data ? `${data.total} residents` : "Register & admit residents"}
+        title="Residents"
+        subtitle={data ? `${data.total} people — students, working & daily guests` : "Everyone staying at your hostels"}
         actions={<Button onClick={openModal}><IconPlus className="h-4 w-4" /> New Admission</Button>}
       />
 
