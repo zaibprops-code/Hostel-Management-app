@@ -3,14 +3,14 @@ import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressDocument } from "../lib/image";
 import { elementToPng } from "../lib/capture";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 import { StatCard } from "../components/stats";
 import { formatPKR, formatDate, formatDateTime, titleCase, amountInWords } from "../lib/format";
-import { IconMoney } from "../components/icons";
+import { IconMoney, IconPlus } from "../components/icons";
 
 export default function PaymentsPage() {
   const { can } = useAuth();
@@ -23,6 +23,32 @@ export default function PaymentsPage() {
   const [viewing, setViewing] = useState<null | { url: string; name: string; mime?: string | null }>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [receiptBusy, setReceiptBusy] = useState<"" | "save" | "share">("");
+  // Record-payment (direct from this tab, not only from a resident's profile).
+  const [payOpen, setPayOpen] = useState(false);
+  const [payForm, setPayForm] = useState<any>({ residentId: "", amount: 0, method: "CASH", reference: "" });
+  const [payProof, setPayProof] = useState<File | null>(null);
+  const [residentsList, setResidentsList] = useState<any[]>([]);
+  const [payError, setPayError] = useState("");
+  const [savingPay, setSavingPay] = useState(false);
+
+  async function openPay() {
+    setPayError(""); setPayForm({ residentId: "", amount: 0, method: "CASH", reference: "" }); setPayProof(null);
+    try { const { data } = await api.get(withQuery("/residents", scopeParam, "pageSize=500", "status=ACTIVE")); setResidentsList(data.data ?? []); }
+    catch { setResidentsList([]); }
+    setPayOpen(true);
+  }
+  async function savePay() {
+    if (!payForm.residentId) { setPayError("Please choose a resident."); return; }
+    setSavingPay(true); setPayError("");
+    try {
+      const { data } = await api.post("/payments", { residentId: payForm.residentId, amount: payForm.amount, method: payForm.method, reference: payForm.reference });
+      if (payProof && data?.id) {
+        const fd = new FormData(); fd.append("file", await compressDocument(payProof));
+        await api.post(`/uploads/payment/${data.id}/proof`, fd).catch(() => {});
+      }
+      setPayOpen(false); setPage(1); await refetch();
+    } catch (e) { setPayError(apiError(e)); } finally { setSavingPay(false); }
+  }
 
   async function viewReceipt(id: string) {
     try { const { data } = await api.get(`/payments/${id}/receipt`); setReceipt(data); } catch (e) { alert(apiError(e)); }
@@ -54,7 +80,8 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Payments" subtitle="Rent collection & receipt register" />
+      <PageHeader title="Rent Payments" subtitle="Rent collection & receipt register"
+        actions={can("payments.manage") && <Button onClick={openPay}><IconPlus className="h-4 w-4" /> Record Payment</Button>} />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <StatCard label="Total Collected" value={formatPKR(data?.totalCollected)} icon={<IconMoney />} accent="emerald" />
@@ -134,6 +161,31 @@ export default function PaymentsPage() {
           </div>
         </Card>
       )}
+
+      {/* Record a payment directly from this tab */}
+      <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Record Payment">
+        <div className="space-y-3">
+          <Select label="Resident" value={payForm.residentId} onChange={(e) => setPayForm({ ...payForm, residentId: e.target.value })}>
+            <option value="">Select resident…</option>
+            {residentsList.map((r) => <option key={r.id} value={r.id}>{r.fullName}{r.room ? ` — ${r.room}${r.bed ? "/" + r.bed : ""}` : ""}</option>)}
+          </Select>
+          <MoneyInput label="Amount" value={payForm.amount} onChange={(n) => setPayForm({ ...payForm, amount: n })} />
+          <Select label="Method" value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}>
+            {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
+          </Select>
+          <Input label="Reference / transaction ID (optional)" value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} />
+          <label className="block">
+            <span className="label">Payment proof / receipt (optional)</span>
+            <label className="input flex items-center cursor-pointer text-slate-500 truncate">
+              {payProof ? payProof.name : "Attach transfer screenshot or PDF…"}
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setPayProof(e.target.files?.[0] ?? null)} />
+            </label>
+          </label>
+          <p className="text-xs text-slate-400">The payment is auto-applied to the resident's oldest unpaid rent and gets a receipt number.</p>
+          <ErrorText>{payError}</ErrorText>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPayOpen(false)}>Cancel</Button><Button loading={savingPay} onClick={savePay}>Save Payment</Button></div>
+        </div>
+      </Modal>
 
       {viewing && <FileViewer open={true} onClose={() => setViewing(null)} url={viewing.url} name={viewing.name} mime={viewing.mime} />}
 
