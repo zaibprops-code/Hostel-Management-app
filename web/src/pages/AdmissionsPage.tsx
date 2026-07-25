@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, SearchButton, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate } from "../lib/format";
 import { IconAdmission, IconPlus, IconSearch } from "../components/icons";
 import { compressPhoto, compressDocument } from "../lib/image";
@@ -171,22 +171,15 @@ export default function AdmissionsPage() {
     <div>
       <PageHeader
         title="Residents"
-        subtitle={data ? `${data.total} people — students, working & daily guests` : "Everyone staying at your hostels"}
-        actions={<Button onClick={openModal}><IconPlus className="h-4 w-4" /> New Admission</Button>}
-      />
-
-      <Card className="p-4 mb-4">
-        <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <IconSearch className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input className="input pl-9" placeholder="Search name, phone, CNIC…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
-          <select className="input bg-white max-w-[180px]" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+        actions={<>
+          <SearchButton value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search name, phone, CNIC…" />
+          <select className="input bg-white w-auto" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option>
             {["ACTIVE", "RESERVED", "NOTICE_GIVEN", "CHECKED_OUT", "SUSPENDED", "BLACKLISTED"].map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
           </select>
-        </div>
-      </Card>
+          <Button onClick={openModal}><IconPlus className="h-4 w-4" /> New Admission</Button>
+        </>}
+      />
 
       {loading ? <PageLoader /> : !data?.data.length ? (
         <EmptyState title="No residents yet" message="Tap “New Admission” to register your first resident and assign them a bed." icon={<IconAdmission className="h-12 w-12" />} />

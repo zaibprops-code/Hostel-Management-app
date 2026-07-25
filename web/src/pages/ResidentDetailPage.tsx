@@ -109,7 +109,7 @@ export default function ResidentDetailPage() {
     <div>
       <PageHeader
         title={r.fullName}
-        subtitle={`${r.hostel.name} · ${r.bed ? `${r.bed.room.name} / ${r.bed.label}` : "No bed assigned"}`}
+        mobileTitle
         actions={
           <div className="flex gap-2 flex-wrap">
             <Link to="/admissions" className="btn-secondary">← Back</Link>

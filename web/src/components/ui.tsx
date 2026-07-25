@@ -1,5 +1,6 @@
 import { ReactNode, ButtonHTMLAttributes, SelectHTMLAttributes, InputHTMLAttributes, useEffect, useState } from "react";
 import clsx from "clsx";
+import { IconSearch } from "./icons";
 
 export function Spinner({ className }: { className?: string }) {
   return (
@@ -22,19 +23,39 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return <div className={clsx("card", className)}>{children}</div>;
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+// Compact, consistent page header. On phones the tab name already shows in the
+// top app bar, so the title is hidden here (set `mobileTitle` for sub-pages like
+// a resident's profile that need it). Subtitles are intentionally not rendered —
+// tabs show their content, not descriptive filler.
+export function PageHeader({ title, actions, mobileTitle }: { title: string; subtitle?: string; actions?: ReactNode; mobileTitle?: boolean }) {
+  if (!actions && !mobileTitle) {
+    // Nothing to show on mobile; only a desktop title.
+    return <h1 className="hidden lg:block text-2xl font-bold text-slate-900 mb-6">{title}</h1>;
+  }
   return (
-    <div className="mb-5 sm:mb-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{title}</h1>
-          {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
-        </div>
-        {/* On desktop, actions sit inline at the right. */}
-        {actions && <div className="hidden lg:flex items-center gap-2 shrink-0">{actions}</div>}
-      </div>
-      {/* On mobile, actions get their own full-width row so they're easy to tap. */}
-      {actions && <div className="lg:hidden mt-3 flex flex-col gap-2 [&_button]:w-full [&_a]:w-full [&>*]:w-full">{actions}</div>}
+    <div className="mb-4 lg:mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <h1 className={clsx("text-xl lg:text-2xl font-bold text-slate-900 truncate", !mobileTitle && "hidden lg:block")}>{title}</h1>
+      {actions && <div className="flex flex-wrap items-center gap-2 [&>*]:shrink-0">{actions}</div>}
+    </div>
+  );
+}
+
+// A search control that starts as an icon and expands into a field when tapped —
+// keeps tab headers clean instead of a permanent full-width search bar.
+export function SearchButton({ value, onChange, placeholder = "Search…" }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [open, setOpen] = useState(!!value);
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} aria-label="Search" className="btn-secondary px-3">
+        <IconSearch className="h-4 w-4" />
+      </button>
+    );
+  }
+  return (
+    <div className="relative flex-1 min-w-[160px]">
+      <IconSearch className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input autoFocus className="input pl-9 pr-9" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+      <button type="button" onClick={() => { onChange(""); setOpen(false); }} aria-label="Close search" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-2xl leading-none px-1">&times;</button>
     </div>
   );
 }

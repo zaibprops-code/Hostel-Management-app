@@ -3,7 +3,7 @@ import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, MoneyInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, Select, SearchButton, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressDocument } from "../lib/image";
 import { elementToPng } from "../lib/capture";
@@ -80,18 +80,17 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <PageHeader title="Rent Payments" subtitle="Rent collection & receipt register"
-        actions={can("payments.manage") && <Button onClick={openPay}><IconPlus className="h-4 w-4" /> Record Payment</Button>} />
+      <PageHeader title="Rent Payments"
+        actions={<>
+          <SearchButton value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search receipt no. or name…" />
+          {can("payments.manage") && <Button onClick={openPay}><IconPlus className="h-4 w-4" /> Record Payment</Button>}
+        </>} />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <StatCard label="Total Collected" value={formatPKR(data?.totalCollected)} icon={<IconMoney />} accent="emerald" />
         <StatCard label="Outstanding" value={formatPKR(totalOutstanding)} icon={<IconMoney />} accent="amber" />
         <StatCard label="Residents Owing" value={outstanding?.length ?? 0} icon={<IconMoney />} accent="rose" />
       </div>
-
-      <Card className="p-4 mb-4">
-        <input className="input" placeholder="Search by receipt no. or resident name…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-      </Card>
 
       {loading ? <PageLoader /> : !data?.data.length ? (
         <EmptyState title="No payments found" icon={<IconMoney className="h-12 w-12" />} />
