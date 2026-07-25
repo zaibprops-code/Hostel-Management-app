@@ -3,7 +3,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, Textarea, ErrorText, PageLoader } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Textarea, ErrorText, PageLoader } from "../components/ui";
 import { StatCard } from "../components/stats";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
 import { IconMoney, IconPlus } from "../components/icons";
@@ -73,7 +73,7 @@ export default function CapitalPage() {
       <Modal open={modal === "inv"} onClose={() => setModal(null)} title="Record Investment">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Type" value={invForm.type} onChange={(e) => setInvForm({ ...invForm, type: e.target.value })}>{["OWNER_INVESTMENT", "PARTNER_INVESTMENT", "CAPITAL_WITHDRAWAL", "OWNER_CONTRIBUTION"].map((t) => <option key={t} value={t}>{titleCase(t)}</option>)}</Select>
-          <Input label="Amount" type="number" value={invForm.amount} onChange={(e) => setInvForm({ ...invForm, amount: +e.target.value })} />
+          <MoneyInput label="Amount" value={invForm.amount} onChange={(n) => setInvForm({ ...invForm, amount: n })} />
           <Input label="Date" type="date" value={invForm.date} onChange={(e) => setInvForm({ ...invForm, date: e.target.value })} />
           <Input label="Source / Investor" value={invForm.source} onChange={(e) => setInvForm({ ...invForm, source: e.target.value })} />
           <div className="lg:col-span-2"><Textarea label="Purpose" value={invForm.purpose} onChange={(e) => setInvForm({ ...invForm, purpose: e.target.value })} /></div>
@@ -85,8 +85,8 @@ export default function CapitalPage() {
       <Modal open={modal === "loan"} onClose={() => setModal(null)} title="Record Loan">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Input label="Lender" value={loanForm.lender} onChange={(e) => setLoanForm({ ...loanForm, lender: e.target.value })} />
-          <Input label="Principal" type="number" value={loanForm.principal} onChange={(e) => setLoanForm({ ...loanForm, principal: +e.target.value })} />
-          <Input label="Interest rate (%)" type="number" value={loanForm.interestRate} onChange={(e) => setLoanForm({ ...loanForm, interestRate: +e.target.value })} />
+          <MoneyInput label="Principal" value={loanForm.principal} onChange={(n) => setLoanForm({ ...loanForm, principal: n })} />
+          <NumberInput label="Interest rate (%)" value={loanForm.interestRate} onChange={(n) => setLoanForm({ ...loanForm, interestRate: n })} />
           <Input label="Date" type="date" value={loanForm.date} onChange={(e) => setLoanForm({ ...loanForm, date: e.target.value })} />
           <div className="lg:col-span-2"><Textarea label="Notes" value={loanForm.notes} onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })} /></div>
         </div>

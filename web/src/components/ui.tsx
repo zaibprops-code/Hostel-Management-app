@@ -1,4 +1,4 @@
-import { ReactNode, ButtonHTMLAttributes, SelectHTMLAttributes, InputHTMLAttributes } from "react";
+import { ReactNode, ButtonHTMLAttributes, SelectHTMLAttributes, InputHTMLAttributes, useEffect, useState } from "react";
 import clsx from "clsx";
 
 export function Spinner({ className }: { className?: string }) {
@@ -58,6 +58,66 @@ export function Input({ label, className, ...rest }: InputHTMLAttributes<HTMLInp
     <label className="block">
       {label && <span className="label">{label}</span>}
       <input className={clsx("input", className)} {...rest} />
+    </label>
+  );
+}
+
+// ---- Numeric inputs --------------------------------------------------------
+// These fix the "stuck 0" problem: the field can be emptied with backspace and
+// shows nothing (not "0") when the value is zero. They report a real number.
+
+const digitsOnly = (s: string) => s.replace(/[^\d]/g, "");
+const withCommas = (n: number) => n.toLocaleString("en-PK");
+
+type NumProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  label?: string;
+  value: number;
+  onChange: (n: number) => void;
+};
+
+// A plain whole-number input (counts, days, quantities).
+export function NumberInput({ label, value, onChange, className, ...rest }: NumProps) {
+  const [text, setText] = useState(value ? String(value) : "");
+  useEffect(() => {
+    const cur = text === "" ? 0 : Number(text);
+    if (cur !== value) setText(value ? String(value) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <label className="block">
+      {label && <span className="label">{label}</span>}
+      <input
+        inputMode="numeric"
+        className={clsx("input", className)}
+        value={text}
+        onChange={(e) => { const d = digitsOnly(e.target.value); setText(d); onChange(d === "" ? 0 : Number(d)); }}
+        {...rest}
+      />
+    </label>
+  );
+}
+
+// A money input: currency prefix, thousands separators, clearable.
+export function MoneyInput({ label, value, onChange, className, currency = "₨", ...rest }: NumProps & { currency?: string }) {
+  const [text, setText] = useState(value ? withCommas(value) : "");
+  useEffect(() => {
+    const cur = digitsOnly(text) === "" ? 0 : Number(digitsOnly(text));
+    if (cur !== value) setText(value ? withCommas(value) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <label className="block">
+      {label && <span className="label">{label}</span>}
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">{currency}</span>
+        <input
+          inputMode="numeric"
+          className={clsx("input pl-9", className)}
+          value={text}
+          onChange={(e) => { const d = digitsOnly(e.target.value); setText(d ? withCommas(Number(d)) : ""); onChange(d ? Number(d) : 0); }}
+          {...rest}
+        />
+      </div>
     </label>
   );
 }

@@ -117,9 +117,15 @@ router.post(
         });
       }
 
-      // Free the bed and mark resident checked out
+      // Free the bed (for a daily guest, free every bed in their booked room)
+      // and mark the resident checked out.
       if (resident.bedId) {
-        await tx.bed.update({ where: { id: resident.bedId }, data: { status: "AVAILABLE" } });
+        if (resident.occupantType === "DAILY") {
+          const leadBed = await tx.bed.findUnique({ where: { id: resident.bedId } });
+          if (leadBed) await tx.bed.updateMany({ where: { roomId: leadBed.roomId, status: "OCCUPIED" }, data: { status: "AVAILABLE" } });
+        } else {
+          await tx.bed.update({ where: { id: resident.bedId }, data: { status: "AVAILABLE" } });
+        }
       }
       await tx.resident.update({
         where: { id: resident.id },

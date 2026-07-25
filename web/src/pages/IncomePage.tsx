@@ -3,7 +3,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, Textarea, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Textarea, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { StatCard } from "../components/stats";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
 import { IconIncome, IconPlus } from "../components/icons";
@@ -73,7 +73,7 @@ export default function IncomePage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Select label="Hostel" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })}>{hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</Select>
           <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{titleCase(c)}</option>)}</Select>
-          <Input label="Amount" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: +e.target.value })} />
+          <MoneyInput label="Amount" value={form.amount} onChange={(n) => setForm({ ...form, amount: n })} />
           <Input label="Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           <Select label="Method" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>{["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}</Select>
           <div className="lg:col-span-2"><Textarea label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>

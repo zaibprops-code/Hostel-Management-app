@@ -3,7 +3,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, Textarea, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Textarea, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
 import { IconMaintenance, IconPlus } from "../components/icons";
 
@@ -64,7 +64,7 @@ export default function MaintenancePage() {
           <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <Input label="Room / location" value={form.roomLabel} onChange={(e) => setForm({ ...form, roomLabel: e.target.value })} />
           <div className="lg:col-span-2"><Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <Input label="Estimated cost" type="number" value={form.estimatedCost} onChange={(e) => setForm({ ...form, estimatedCost: +e.target.value })} />
+          <MoneyInput label="Estimated cost" value={form.estimatedCost} onChange={(n) => setForm({ ...form, estimatedCost: n })} />
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={saving} onClick={save}>Create Ticket</Button></div>

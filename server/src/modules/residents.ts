@@ -78,6 +78,7 @@ router.get(
         photoUrl: r.photoUrl,
         occupantType: r.occupantType,
         dailyRate: dec(r.dailyRate),
+        guests: r.guests,
         phone: r.phone,
         cnic: r.cnic,
         status: r.status,

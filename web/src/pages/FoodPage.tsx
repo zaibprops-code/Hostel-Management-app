@@ -3,7 +3,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, Textarea, ErrorText, PageLoader } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Textarea, ErrorText, PageLoader } from "../components/ui";
 import { StatCard } from "../components/stats";
 import { formatPKR, titleCase } from "../lib/format";
 import { IconFood, IconPlus } from "../components/icons";
@@ -112,7 +112,7 @@ export default function FoodPage() {
       <Modal open={planOpen} onClose={() => setPlanOpen(false)} title="New Food Plan">
         <div className="space-y-3">
           <Input label="Name" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} />
-          <Input label="Monthly cost" type="number" value={planForm.monthlyCost} onChange={(e) => setPlanForm({ ...planForm, monthlyCost: +e.target.value })} />
+          <MoneyInput label="Monthly cost" value={planForm.monthlyCost} onChange={(n) => setPlanForm({ ...planForm, monthlyCost: n })} />
           <Textarea label="Description" value={planForm.description} onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })} />
           <div className="flex gap-4 text-sm">
             {[["includesBreakfast", "Breakfast"], ["includesLunch", "Lunch"], ["includesDinner", "Dinner"]].map(([k, l]) => (

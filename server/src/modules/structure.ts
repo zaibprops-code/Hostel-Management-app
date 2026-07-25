@@ -137,6 +137,36 @@ router.get(
   })
 );
 
+// GET /api/structure/available-rooms?hostelId= — whole rooms that are fully
+// free, for daily / short-stay group bookings.
+router.get(
+  "/available-rooms",
+  requirePermission("rooms.view"),
+  asyncHandler(async (req, res) => {
+    const scope = await hostelScope(req);
+    const rooms = await prisma.room.findMany({
+      where: scope,
+      include: { floor: true, hostel: { select: { id: true, name: true } }, beds: true },
+      orderBy: { name: "asc" },
+    });
+    res.json(
+      rooms
+        // Only rooms where every bed is available (an empty room can't be booked).
+        .filter((r) => r.beds.length > 0 && r.beds.every((b) => b.status === "AVAILABLE"))
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          capacity: r.capacity,
+          beds: r.beds.length,
+          floor: r.floor?.name ?? "",
+          hostelId: r.hostelId,
+          hostelName: r.hostel.name,
+          suggestedRent: Number(r.beds.reduce((s, b) => s + Number(b.monthlyRent), 0)), // whole-room monthly
+        }))
+    );
+  })
+);
+
 // GET /api/structure/available-beds?hostelId= — for admission dropdowns
 router.get(
   "/available-beds",

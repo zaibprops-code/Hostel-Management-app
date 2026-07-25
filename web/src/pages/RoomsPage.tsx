@@ -4,7 +4,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconBed, IconPlus } from "../components/icons";
 
@@ -118,7 +118,7 @@ export default function RoomsPage() {
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </Select>
           <Input label="Room name" placeholder="Room 101" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} />
-          <Input label="Capacity" type="number" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: +e.target.value })} />
+          <NumberInput label="Capacity" value={roomForm.capacity} onChange={(n) => setRoomForm({ ...roomForm, capacity: n })} />
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={addRoom}>Add Room</Button></div>
         </div>
@@ -130,7 +130,7 @@ export default function RoomsPage() {
             {data?.map((r) => <option key={r.id} value={r.id}>{r.hostel.name} · {r.name}</option>)}
           </Select>
           <Input label="Bed label" placeholder="Bed A" value={bedForm.label} onChange={(e) => setBedForm({ ...bedForm, label: e.target.value })} />
-          <Input label="Monthly rent" type="number" value={bedForm.monthlyRent} onChange={(e) => setBedForm({ ...bedForm, monthlyRent: +e.target.value })} />
+          <MoneyInput label="Monthly rent" value={bedForm.monthlyRent} onChange={(n) => setBedForm({ ...bedForm, monthlyRent: n })} />
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={addBed}>Add Bed</Button></div>
         </div>

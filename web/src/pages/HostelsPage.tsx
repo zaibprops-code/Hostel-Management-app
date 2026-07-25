@@ -3,7 +3,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconHostel, IconPlus } from "../components/icons";
 
@@ -84,9 +84,9 @@ export default function HostelsPage() {
             <option value="MALE">Boys</option><option value="FEMALE">Girls</option><option value="OTHER">Mixed</option>
           </Select>
           <Input label="Contact number" value={form.contactNumber} onChange={(e) => setForm({ ...form, contactNumber: e.target.value })} />
-          <Input label="Notice period (days)" type="number" value={form.noticePeriodDays} onChange={(e) => setForm({ ...form, noticePeriodDays: +e.target.value })} />
-          <Input label="Property rent (monthly)" type="number" value={form.propertyRent} onChange={(e) => setForm({ ...form, propertyRent: +e.target.value })} />
-          <Input label="Property deposit" type="number" value={form.propertyDeposit} onChange={(e) => setForm({ ...form, propertyDeposit: +e.target.value })} />
+          <NumberInput label="Notice period (days)" value={form.noticePeriodDays} onChange={(n) => setForm({ ...form, noticePeriodDays: n })} />
+          <MoneyInput label="Property rent (monthly)" value={form.propertyRent} onChange={(n) => setForm({ ...form, propertyRent: n })} />
+          <MoneyInput label="Property deposit" value={form.propertyDeposit} onChange={(n) => setForm({ ...form, propertyDeposit: n })} />
           <div className="lg:col-span-2"><Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
         </div>
         <ErrorText>{error}</ErrorText>

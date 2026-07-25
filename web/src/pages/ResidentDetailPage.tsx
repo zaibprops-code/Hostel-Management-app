@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressPhoto, compressDocument } from "../lib/image";
 import { formatPKR, formatDate, titleCase } from "../lib/format";
@@ -177,7 +177,7 @@ export default function ResidentDetailPage() {
               ["Food Plan", r.foodPlan?.name],
               ["Admission", formatDate(r.admissionDate)],
               ...(r.occupantType === "DAILY"
-                ? [["Daily Rate", formatPKR(r.dailyRate)], ["Expected checkout", r.expectedCheckout ? formatDate(r.expectedCheckout) : "—"]]
+                ? [["Guests", String(r.guests ?? 1)], ["Room rate / night", formatPKR(r.dailyRate)], ["Expected checkout", r.expectedCheckout ? formatDate(r.expectedCheckout) : "—"]]
                 : [["Monthly Rent", formatPKR(r.monthlyRent)]]),
             ].map(([k, v]) => (
               <div key={k as string} className="flex justify-between gap-2">
@@ -254,7 +254,7 @@ export default function ResidentDetailPage() {
       {/* Payment modal */}
       <Modal open={pay} onClose={() => setPay(false)} title="Record Payment">
         <div className="space-y-3">
-          <Input label="Amount" type="number" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: +e.target.value })} />
+          <MoneyInput label="Amount" value={payForm.amount} onChange={(n) => setPayForm({ ...payForm, amount: n })} />
           <Select label="Method" value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}>
             {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
           </Select>
@@ -314,8 +314,8 @@ export default function ResidentDetailPage() {
           </div>
           <Input label="Checkout date" type="date" value={coForm.checkoutDate} onChange={(e) => setCoForm({ ...coForm, checkoutDate: e.target.value })} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <Input label="Damage charges" type="number" value={coForm.damageCharges} onChange={(e) => setCoForm({ ...coForm, damageCharges: +e.target.value })} />
-            <Input label="Other charges" type="number" value={coForm.otherCharges} onChange={(e) => setCoForm({ ...coForm, otherCharges: +e.target.value })} />
+            <MoneyInput label="Damage charges" value={coForm.damageCharges} onChange={(n) => setCoForm({ ...coForm, damageCharges: n })} />
+            <MoneyInput label="Other charges" value={coForm.otherCharges} onChange={(n) => setCoForm({ ...coForm, otherCharges: n })} />
           </div>
           <div className="rounded-lg bg-emerald-50 p-3 text-sm flex justify-between">
             <span className="text-emerald-700 font-medium">Estimated refund</span>

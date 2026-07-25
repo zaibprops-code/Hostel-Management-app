@@ -4,7 +4,7 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, Select, Badge, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, Badge, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconInventory, IconPlus } from "../components/icons";
 
@@ -79,9 +79,9 @@ export default function InventoryPage() {
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
           <Select label="Unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })}>{["kg", "litre", "dozen", "piece", "pack", "bag"].map((u) => <option key={u} value={u}>{u}</option>)}</Select>
-          <Input label="Quantity" type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: +e.target.value })} />
-          <Input label="Min stock" type="number" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: +e.target.value })} />
-          <Input label="Purchase price" type="number" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: +e.target.value })} />
+          <NumberInput label="Quantity" value={form.quantity} onChange={(n) => setForm({ ...form, quantity: n })} />
+          <NumberInput label="Min stock" value={form.minStock} onChange={(n) => setForm({ ...form, minStock: n })} />
+          <MoneyInput label="Purchase price" value={form.purchasePrice} onChange={(n) => setForm({ ...form, purchasePrice: n })} />
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button><Button loading={saving} onClick={save}>Save Item</Button></div>
@@ -91,8 +91,8 @@ export default function InventoryPage() {
         <div className="space-y-3">
           <p className="text-sm text-slate-500">Current stock: <b>{txn?.quantity} {txn?.unit}</b></p>
           <Select label="Transaction type" value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value })}>{["PURCHASE", "CONSUMPTION", "WASTE", "ADJUSTMENT"].map((t) => <option key={t} value={t}>{t}</option>)}</Select>
-          <Input label="Quantity" type="number" value={txnForm.quantity} onChange={(e) => setTxnForm({ ...txnForm, quantity: +e.target.value })} />
-          <Input label="Unit cost (optional)" type="number" value={txnForm.unitCost} onChange={(e) => setTxnForm({ ...txnForm, unitCost: +e.target.value })} />
+          <NumberInput label="Quantity" value={txnForm.quantity} onChange={(n) => setTxnForm({ ...txnForm, quantity: n })} />
+          <MoneyInput label="Unit cost (optional)" value={txnForm.unitCost} onChange={(n) => setTxnForm({ ...txnForm, unitCost: n })} />
           <Input label="Note" value={txnForm.note} onChange={(e) => setTxnForm({ ...txnForm, note: e.target.value })} />
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setTxn(null)}>Cancel</Button><Button loading={saving} onClick={saveTxn}>Record</Button></div>
