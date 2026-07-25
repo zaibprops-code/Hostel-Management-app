@@ -50,6 +50,10 @@ services:
       # Public website address — used to build the link inside reset emails.
       - key: WEB_APP_URL
         value: https://hostel-web-us71.onrender.com
+      # The API pings this URL every ~10 min so the free instance never sleeps
+      # (avoids the cold-start delay). Should be this API's own public address.
+      - key: KEEP_ALIVE_URL
+        value: https://hostel-api-3fu5.onrender.com
       # Password-reset email (optional). Fill these in the Render dashboard
       # (Environment tab) — they're marked sync:false so secrets aren't stored
       # in git. See DEPLOYMENT.md → "Password-reset email". Leave blank to skip.

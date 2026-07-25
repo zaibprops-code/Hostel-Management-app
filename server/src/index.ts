@@ -2,6 +2,7 @@ import { createApp } from "./app";
 import { env } from "./lib/env";
 import { prisma } from "./lib/prisma";
 import { removeDemoDataIfPresent, resetDataIfRequested } from "./lib/cleanup";
+import { startKeepAlive } from "./lib/keepalive";
 
 async function main() {
   await prisma.$connect();
@@ -13,6 +14,7 @@ async function main() {
   app.listen(env.port, () => {
     // eslint-disable-next-line no-console
     console.log(`🏨 Hostel API listening on http://localhost:${env.port} (${env.nodeEnv})`);
+    startKeepAlive(); // stop the free host from sleeping (no-op locally)
   });
 }
 
