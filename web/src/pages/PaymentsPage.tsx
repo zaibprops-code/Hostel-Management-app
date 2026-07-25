@@ -16,7 +16,8 @@ export default function PaymentsPage() {
   const { can } = useAuth();
   const { scopeParam } = useHostels();
   const [page, setPage] = useState(1);
-  const { data, loading, refetch } = useApi<any>(withQuery("/payments", scopeParam, `page=${page}`), [page, scopeParam]);
+  const [search, setSearch] = useState("");
+  const { data, loading, refetch } = useApi<any>(withQuery("/payments", scopeParam, `page=${page}`, search && `search=${encodeURIComponent(search)}`), [page, search, scopeParam]);
   const { data: outstanding } = useApi<any[]>(withQuery("/payments/reports/outstanding", scopeParam), [scopeParam]);
   const [receipt, setReceipt] = useState<any>(null);
   const [viewing, setViewing] = useState<null | { url: string; name: string; mime?: string | null }>(null);
@@ -53,7 +54,7 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <PageHeader title="Payments" subtitle="Rent collection & receipts" />
+      <PageHeader title="Payments" subtitle="Rent collection & receipt register" />
 
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <StatCard label="Total Collected" value={formatPKR(data?.totalCollected)} icon={<IconMoney />} accent="emerald" />
@@ -61,8 +62,12 @@ export default function PaymentsPage() {
         <StatCard label="Residents Owing" value={outstanding?.length ?? 0} icon={<IconMoney />} accent="rose" />
       </div>
 
+      <Card className="p-4 mb-4">
+        <input className="input" placeholder="Search by receipt no. or resident name…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+      </Card>
+
       {loading ? <PageLoader /> : !data?.data.length ? (
-        <EmptyState title="No payments recorded" icon={<IconMoney className="h-12 w-12" />} />
+        <EmptyState title="No payments found" icon={<IconMoney className="h-12 w-12" />} />
       ) : (
         <Card className="overflow-hidden">
           {/* Mobile cards */}
@@ -74,7 +79,7 @@ export default function PaymentsPage() {
                   <span className="font-bold text-emerald-600">{formatPKR(p.amount)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-1">
-                  <p className="text-xs text-slate-400">{titleCase(p.method)} · {formatDate(p.paidAt)}</p>
+                  <p className="text-xs text-slate-400 truncate">{p.receiptNo ? `${p.receiptNo} · ` : ""}{titleCase(p.method)} · {formatDate(p.paidAt)}</p>
                   <StatusBadge status={p.status} />
                 </div>
                 <div className="flex gap-4 mt-2 items-center">
@@ -93,12 +98,13 @@ export default function PaymentsPage() {
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50"><tr>
-                <th className="th">Resident</th><th className="th">Amount</th><th className="th">Method</th>
+                <th className="th">Receipt No.</th><th className="th">Resident</th><th className="th">Amount</th><th className="th">Method</th>
                 <th className="th">Reference</th><th className="th">Date</th><th className="th">Status</th><th className="th"></th>
               </tr></thead>
               <tbody>
                 {data.data.map((p: any) => (
                   <tr key={p.id} className="hover:bg-slate-50">
+                    <td className="td font-mono text-xs text-slate-500">{p.receiptNo ?? "—"}</td>
                     <td className="td font-medium text-slate-800">{p.resident.fullName}</td>
                     <td className="td font-semibold text-emerald-600">{formatPKR(p.amount)}</td>
                     <td className="td">{titleCase(p.method)}</td>
@@ -146,7 +152,7 @@ export default function PaymentsPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="text-sm font-bold tracking-wide text-slate-700">PAYMENT RECEIPT</p>
-                  <p className="text-xs text-slate-400">No. {String(receipt.id).slice(-8).toUpperCase()}</p>
+                  <p className="text-xs text-slate-500 font-semibold">No. {receipt.receiptNo ?? String(receipt.id).slice(-8).toUpperCase()}</p>
                 </div>
                 <span className={`rounded-md px-2.5 py-1 text-xs font-bold border ${receipt.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
                   {receipt.status === "COMPLETED" ? "PAID" : titleCase(receipt.status)}

@@ -543,6 +543,7 @@ model Payment {
   id          String        @id @default(cuid())
   hostelId    String
   residentId  String
+  receiptNo   String?       @unique // sequential, human-readable receipt number
   amount      Decimal       @db.Decimal(12, 2)
   method      PaymentMethod
   reference   String?
@@ -1016,4 +1017,11 @@ model AuditLog {
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+}
+
+// Atomic per-hostel/per-year counter used to mint sequential receipt numbers.
+// Key is "<hostelId>:<year>"; value is the last number issued.
+model ReceiptSequence {
+  key   String @id
+  value Int    @default(0)
 }

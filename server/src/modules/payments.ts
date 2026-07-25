@@ -7,6 +7,7 @@ import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
 import { hasPermission } from "../lib/permissions";
 import { computeStatus } from "../lib/rent";
+import { nextReceiptNo } from "../lib/receipts";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -19,7 +20,10 @@ router.get(
     const { page, pageSize, search } = parsePagination(req.query);
     const scope = await hostelScope(req);
     const where: any = { ...scope };
-    if (search) where.resident = { fullName: { contains: search, mode: "insensitive" } };
+    if (search) where.OR = [
+      { receiptNo: { contains: search, mode: "insensitive" } },
+      { resident: { fullName: { contains: search, mode: "insensitive" } } },
+    ];
 
     const [total, payments, agg] = await Promise.all([
       prisma.payment.count({ where }),
@@ -41,6 +45,7 @@ router.get(
       totalCollected: dec(agg._sum.amount),
       data: payments.map((p) => ({
         id: p.id,
+        receiptNo: p.receiptNo,
         amount: dec(p.amount),
         method: p.method,
         reference: p.reference,
@@ -74,19 +79,22 @@ router.post(
   validateBody(paymentSchema),
   asyncHandler(async (req, res) => {
     const body = req.body as z.infer<typeof paymentSchema>;
-    const resident = await prisma.resident.findUnique({ where: { id: body.residentId } });
+    const resident = await prisma.resident.findUnique({ where: { id: body.residentId }, include: { hostel: { select: { code: true } } } });
     if (!resident) throw notFound("Resident not found");
     await assertHostelAccess(req, resident.hostelId);
 
     const payment = await prisma.$transaction(async (tx) => {
+      const paidAt = body.paidAt ?? new Date();
+      const receiptNo = await nextReceiptNo(tx, resident.hostelId, resident.hostel.code, paidAt);
       const created = await tx.payment.create({
         data: {
           hostelId: resident.hostelId,
           residentId: resident.id,
+          receiptNo,
           amount: body.amount,
           method: body.method,
           reference: body.reference,
-          paidAt: body.paidAt ?? new Date(),
+          paidAt,
           receivedById: req.auth!.id,
           notes: body.notes,
         },
@@ -151,6 +159,7 @@ router.get(
 
     res.json({
       id: payment.id,
+      receiptNo: payment.receiptNo,
       company: payment.hostel.company.name,
       companyLogo: payment.hostel.company.logoUrl,
       hostel: payment.hostel.name,

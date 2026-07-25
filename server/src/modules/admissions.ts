@@ -6,6 +6,7 @@ import { validateBody } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
 import { ensureRentCharge } from "../lib/rent";
+import { nextReceiptNo } from "../lib/receipts";
 import { dec } from "../lib/query";
 
 const router = Router();
@@ -180,10 +181,13 @@ router.post(
 
       // 6. Initial rent payment, allocated to the first charge
       if (body.initialPayment > 0) {
+        const hostelRow = await tx.hostel.findUnique({ where: { id: hostelId }, select: { code: true } });
+        const receiptNo = await nextReceiptNo(tx, hostelId, hostelRow?.code ?? "RCP", body.admissionDate);
         const payment = await tx.payment.create({
           data: {
             hostelId,
             residentId,
+            receiptNo,
             amount: body.initialPayment,
             method: body.paymentMethod,
             receivedById: req.auth!.id,
