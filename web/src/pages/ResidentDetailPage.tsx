@@ -208,6 +208,35 @@ export default function ResidentDetailPage() {
             <Card className="p-4"><p className="text-xs text-slate-400">Monthly Rent</p><p className="text-xl font-bold text-slate-800">{formatPKR(r.monthlyRent)}</p></Card>
           </div>
 
+          {r.rentCycle && (
+            <Card className={`p-5 ${r.rentCycle.status === "OVERDUE" ? "border-rose-200 bg-rose-50/40" : r.rentCycle.status === "DUE" ? "border-amber-200 bg-amber-50/40" : ""}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-slate-800">Rent cycle</h3>
+                  <p className="text-xs text-slate-400">Rent is collected 1st–{r.rentCycle.dueDay} of each month.</p>
+                </div>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${{ PAID: "bg-emerald-100 text-emerald-700", DUE: "bg-amber-100 text-amber-700", OVERDUE: "bg-rose-100 text-rose-700" }[r.rentCycle.status as string]}`}>
+                  {{ PAID: "Paid up", DUE: "Due this month", OVERDUE: "Overdue" }[r.rentCycle.status as string]}
+                </span>
+              </div>
+              <div className="mt-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">{r.rentCycle.status === "PAID" ? "Next rent due by" : "Pay by"}</span>
+                  <span className="font-semibold text-slate-800">{formatDate(r.rentCycle.nextDueDate)}</span>
+                </div>
+                {r.rentCycle.outstandingMonths > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Unpaid months</span>
+                    <span className="font-semibold text-rose-600">{r.rentCycle.outstandingMonths} · {formatPKR(r.outstanding)}</span>
+                  </div>
+                )}
+              </div>
+              {r.rentCycle.status !== "PAID" && can("payments.manage") && active && (
+                <Button className="mt-3 w-full" onClick={() => setPay(true)}>Record Payment</Button>
+              )}
+            </Card>
+          )}
+
           <Card className="p-5">
             <h3 className="font-semibold text-slate-800 mb-3">Rent Charges</h3>
             {!r.rentCharges.length ? <p className="text-sm text-slate-400">No charges yet.</p> : (

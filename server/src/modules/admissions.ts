@@ -94,6 +94,9 @@ router.post(
     if (!hostelId) throw badRequest("Select a hostel, or a bed/room to assign");
     await assertHostelAccess(req, hostelId);
 
+    // Rent for monthly occupants is due by the hostel's configured day (e.g. 10th).
+    const rentDueDay = (await prisma.hostel.findUnique({ where: { id: hostelId }, select: { rentDueDay: true } }))?.rentDueDay ?? 10;
+
     // Billing: monthly rent for long-term; (daily rate × nights) once for daily.
     const nights = Math.max(1, body.nights || 1);
     const chargeAmount = isDaily ? (body.dailyRate || 0) * nights : body.monthlyRent;
@@ -147,7 +150,7 @@ router.post(
           admissionDate: body.admissionDate,
           monthlyRent: chargeAmount, // for daily this is the total stay cost
           depositAmount: body.depositAmount,
-          rentDueDay: isDaily ? body.admissionDate.getDate() : body.rentDueDay,
+          rentDueDay: isDaily ? body.admissionDate.getDate() : rentDueDay,
           contractMonths: isDaily ? null : body.contractMonths,
           notes: body.notes,
         },
@@ -160,7 +163,7 @@ router.post(
         year: body.admissionDate.getFullYear(),
         month: body.admissionDate.getMonth() + 1,
         amount: chargeAmount,
-        dueDay: isDaily ? body.admissionDate.getDate() : body.rentDueDay,
+        dueDay: isDaily ? body.admissionDate.getDate() : rentDueDay,
       });
 
       // 5. Security deposit (kept separate from revenue)

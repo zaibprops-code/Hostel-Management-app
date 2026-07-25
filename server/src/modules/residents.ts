@@ -6,6 +6,7 @@ import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
+import { catchUpRent, rentCycle } from "../lib/rent";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -41,6 +42,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { page, pageSize, search } = parsePagination(req.query);
     const scope = await hostelScope(req);
+    await catchUpRent(prisma, scope.hostelId.in); // ensure this month's charges exist
     const status = req.query.status as string | undefined;
 
     const where: any = { ...scope };
@@ -62,8 +64,12 @@ router.get(
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: {
-          hostel: { select: { id: true, name: true } },
+          hostel: { select: { id: true, name: true, rentDueDay: true } },
           bed: { include: { room: true } },
+          rentCharges: {
+            where: { status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] } },
+            select: { periodYear: true, periodMonth: true, amount: true, discount: true, amountPaid: true },
+          },
         },
       }),
     ]);
@@ -72,7 +78,11 @@ router.get(
       total,
       page,
       pageSize,
-      data: residents.map((r) => ({
+      data: residents.map((r) => {
+        const cycle = r.occupantType === "DAILY"
+          ? null
+          : rentCycle(r.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), r.hostel.rentDueDay);
+        return {
         id: r.id,
         fullName: r.fullName,
         photoUrl: r.photoUrl,
@@ -83,11 +93,14 @@ router.get(
         cnic: r.cnic,
         status: r.status,
         monthlyRent: dec(r.monthlyRent),
+        rentStatus: cycle?.status ?? null, // PAID | DUE | OVERDUE (monthly only)
+        rentDueDate: cycle?.nextDueDate ?? null,
         hostel: r.hostel,
         room: r.bed?.room.name ?? null,
         bed: r.bed?.label ?? null,
         checkInDate: r.checkInDate,
-      })),
+      };
+      }),
     });
   })
 );
@@ -100,7 +113,7 @@ router.get(
     const resident = await prisma.resident.findUnique({
       where: { id: req.params.id },
       include: {
-        hostel: { select: { id: true, name: true } },
+        hostel: { select: { id: true, name: true, rentDueDay: true } },
         bed: { include: { room: { include: { floor: true } } } },
         foodPlan: true,
         documents: true,
@@ -121,12 +134,16 @@ router.get(
       0
     );
     const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
+    const cycle = resident.occupantType === "DAILY"
+      ? null
+      : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), resident.hostel.rentDueDay);
 
     res.json({
       ...resident,
       monthlyRent: dec(resident.monthlyRent),
       dailyRate: dec(resident.dailyRate),
       outstanding: Math.max(0, outstanding),
+      rentCycle: cycle,
       deposit: resident.deposit
         ? {
             ...resident.deposit,

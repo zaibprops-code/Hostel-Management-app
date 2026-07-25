@@ -315,6 +315,9 @@ model Hostel {
   // Security deposit the business paid to the property owner.
   propertyDeposit    Decimal  @default(0) @db.Decimal(12, 2)
   noticePeriodDays   Int      @default(30)
+  // Rent for each month is payable from the 1st and must be paid by this day
+  // (e.g. 10 = "1st to 10th"). After it, unpaid rent is overdue.
+  rentDueDay         Int      @default(10)
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

@@ -12,7 +12,7 @@ export default function HostelsPage() {
   const { reload } = useHostels();
   const { data, loading, refetch } = useApi<any[]>("/hostels");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, contactNumber: "", address: "" });
+  const [form, setForm] = useState<any>({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -21,7 +21,7 @@ export default function HostelsPage() {
     try {
       await api.post("/hostels", form);
       setOpen(false);
-      setForm({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, contactNumber: "", address: "" });
+      setForm({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" });
       await refetch(); await reload();
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
@@ -85,6 +85,7 @@ export default function HostelsPage() {
           </Select>
           <Input label="Contact number" value={form.contactNumber} onChange={(e) => setForm({ ...form, contactNumber: e.target.value })} />
           <NumberInput label="Notice period (days)" value={form.noticePeriodDays} onChange={(n) => setForm({ ...form, noticePeriodDays: n })} />
+          <NumberInput label="Rent due by (day of month)" value={form.rentDueDay} onChange={(n) => setForm({ ...form, rentDueDay: Math.min(28, Math.max(1, n)) })} />
           <MoneyInput label="Property rent (monthly)" value={form.propertyRent} onChange={(n) => setForm({ ...form, propertyRent: n })} />
           <MoneyInput label="Property deposit" value={form.propertyDeposit} onChange={(n) => setForm({ ...form, propertyDeposit: n })} />
           <div className="lg:col-span-2"><Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>

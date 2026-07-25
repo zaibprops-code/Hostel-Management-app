@@ -23,6 +23,16 @@ function rentLabel(r: any): string {
   return r.occupantType === "DAILY" ? `${formatPKR(r.dailyRate)}/day` : `${formatPKR(r.monthlyRent)}/mo`;
 }
 
+const RENT_BADGE: Record<string, { label: string; cls: string }> = {
+  PAID: { label: "Rent paid", cls: "bg-emerald-100 text-emerald-700" },
+  DUE: { label: "Rent due", cls: "bg-amber-100 text-amber-700" },
+  OVERDUE: { label: "Rent overdue", cls: "bg-rose-100 text-rose-700" },
+};
+function RentBadge({ status }: { status?: string | null }) {
+  if (!status || !RENT_BADGE[status]) return null;
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${RENT_BADGE[status].cls}`}>{RENT_BADGE[status].label}</span>;
+}
+
 const EMPTY = {
   // resident details
   hostelId: "", fullName: "", guardianName: "", phone: "", cnic: "", gender: "MALE", city: "",
@@ -192,7 +202,7 @@ export default function AdmissionsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-slate-800 truncate">{r.fullName}</p>
-                    <StatusBadge status={r.status} />
+                    <div className="flex items-center gap-1.5 shrink-0"><RentBadge status={r.rentStatus} /><StatusBadge status={r.status} /></div>
                   </div>
                   <p className="text-xs text-slate-400 truncate">{r.room ? `${r.room} · ${r.bed}` : "No bed"} · {rentLabel(r)}{r.occupantType === "DAILY" ? ` · ${r.guests || 1} guest${(r.guests || 1) > 1 ? "s" : ""}` : ""}</p>
                 </div>
@@ -220,7 +230,7 @@ export default function AdmissionsPage() {
                     <td className="td">{r.room ? `${r.room} · ${r.bed}` : "—"}</td>
                     <td className="td">{rentLabel(r)}</td>
                     <td className="td">{formatDate(r.checkInDate)}</td>
-                    <td className="td"><StatusBadge status={r.status} /></td>
+                    <td className="td"><div className="flex flex-col items-start gap-1"><StatusBadge status={r.status} /><RentBadge status={r.rentStatus} /></div></td>
                     <td className="td text-right"><Link to={`/residents/${r.id}`} className="text-brand-600 font-medium hover:underline">View</Link></td>
                   </tr>
                 ))}
@@ -337,7 +347,6 @@ export default function AdmissionsPage() {
                 </>
               ) : (
                 <>
-                  <NumberInput label="Rent due day" value={form.rentDueDay} onChange={(n) => setForm({ ...form, rentDueDay: n })} />
                   <MoneyInput label="Monthly rent" value={form.monthlyRent} onChange={(n) => setForm({ ...form, monthlyRent: n })} />
                   <NumberInput label="Contract (months)" value={form.contractMonths} onChange={(n) => setForm({ ...form, contractMonths: n })} />
                 </>
