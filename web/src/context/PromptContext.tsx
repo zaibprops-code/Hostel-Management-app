@@ -53,7 +53,7 @@ export function PromptProvider({ children }: { children: ReactNode }) {
           onSubmit={(e) => { e.preventDefault(); if (!disabled) submit(); }}
           className="space-y-3"
         >
-          {pending?.message && <p className="text-sm text-slate-600">{pending.message}</p>}
+          {pending?.message && <p className="text-sm text-slate-600 whitespace-pre-line">{pending.message}</p>}
           <Input
             label={pending?.label}
             type={pending?.type ?? "text"}

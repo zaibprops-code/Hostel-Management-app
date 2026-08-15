@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, badRequest, notFound } from "../lib/http";
+import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, accessibleHostelIds, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
@@ -118,11 +118,14 @@ router.put(
   })
 );
 
-// DELETE /api/hostels/:id — permanently remove a hostel branch. Refused while
-// the branch still holds people or financial records, so history is never
-// silently destroyed; the owner is told exactly what to clear (or to archive
-// the hostel instead). An empty branch is removed together with its structure,
-// menus, inventory and operational logs.
+// DELETE /api/hostels/:id — permanently delete a hostel branch AND everything
+// inside it: residents, rooms/beds, payments, deposits, expenses, income,
+// staff, inventory, suppliers and every operational log. This is deliberately
+// a full teardown (the client requires the owner to type the hostel name to
+// confirm), so there is no need to empty the branch by hand first. Done in one
+// transaction in FK-safe order; records that cascade (documents, allocations,
+// deposit ledger, staff attendance/salary, purchase items, inventory
+// transactions, structure) are removed automatically with their parent.
 router.delete(
   "/:id",
   requirePermission("hostels.manage"),
@@ -130,43 +133,45 @@ router.delete(
     await assertHostelAccess(req, req.params.id);
     const hostel = await prisma.hostel.findUnique({ where: { id: req.params.id } });
     if (!hostel) throw notFound("Hostel not found");
+    const hostelId = hostel.id;
 
-    const [residents, payments, expenses, incomes, staff, investments, loans] = await Promise.all([
-      prisma.resident.count({ where: { hostelId: hostel.id } }),
-      prisma.payment.count({ where: { hostelId: hostel.id } }),
-      prisma.expense.count({ where: { hostelId: hostel.id } }),
-      prisma.income.count({ where: { hostelId: hostel.id } }),
-      prisma.staff.count({ where: { hostelId: hostel.id } }),
-      prisma.investment.count({ where: { hostelId: hostel.id } }),
-      prisma.loan.count({ where: { hostelId: hostel.id } }),
-    ]);
+    // Resident portal logins to clean up after their residents are gone.
+    const portalUserIds = (
+      await prisma.resident.findMany({
+        where: { hostelId, userId: { not: null } },
+        select: { userId: true },
+      })
+    ).map((r) => r.userId!) as string[];
 
-    const blockers: string[] = [];
-    if (residents) blockers.push(`${residents} resident(s)`);
-    if (payments) blockers.push(`${payments} payment(s)`);
-    if (expenses) blockers.push(`${expenses} expense record(s)`);
-    if (incomes) blockers.push(`${incomes} income record(s)`);
-    if (staff) blockers.push(`${staff} staff member(s)`);
-    if (investments) blockers.push(`${investments} investment(s)`);
-    if (loans) blockers.push(`${loans} loan(s)`);
-    if (blockers.length) {
-      throw badRequest(
-        `This hostel still has ${blockers.join(", ")}. Check out or remove them first — deleting a hostel with records would erase that history.`
-      );
-    }
+    await prisma.$transaction(async (tx) => {
+      // 1. Records that reference residents (so residents can be deleted next).
+      await tx.checkout.deleteMany({ where: { resident: { hostelId } } });
+      await tx.maintenanceTicket.deleteMany({ where: { hostelId } });
+      await tx.complaint.deleteMany({ where: { hostelId } });
+      await tx.visitor.deleteMany({ where: { hostelId } });
+      await tx.payment.deleteMany({ where: { hostelId } }); // cascades allocations
+      await tx.rentCharge.deleteMany({ where: { hostelId } });
+      await tx.securityDeposit.deleteMany({ where: { hostelId } }); // cascades ledger
+      await tx.admission.deleteMany({ where: { hostelId } });
+      await tx.income.deleteMany({ where: { hostelId } });
+      // 2. Residents (cascades their documents & food attendance).
+      await tx.resident.deleteMany({ where: { hostelId } });
+      // 3. Remaining hostel-scoped records that do not cascade with the hostel.
+      await tx.staff.deleteMany({ where: { hostelId } }); // cascades attendance/salary
+      await tx.expense.deleteMany({ where: { hostelId } });
+      await tx.investment.deleteMany({ where: { hostelId } });
+      await tx.loan.deleteMany({ where: { hostelId } });
+      await tx.notice.deleteMany({ where: { hostelId } });
+      // 4. The hostel — structure (floors/rooms/beds), menus, suppliers,
+      //    purchases, inventory and access grants cascade with it.
+      await tx.hostel.delete({ where: { id: hostelId } });
+      // 5. Orphaned resident-portal logins.
+      if (portalUserIds.length) {
+        await tx.user.deleteMany({ where: { id: { in: portalUserIds }, role: "RESIDENT" } });
+      }
+    });
 
-    // No people or money records remain. Clear the operational logs that do not
-    // cascade, then delete the hostel — structure (floors/rooms/beds), menus,
-    // suppliers, purchases, inventory and access grants cascade with it.
-    await prisma.$transaction([
-      prisma.maintenanceTicket.deleteMany({ where: { hostelId: hostel.id } }),
-      prisma.complaint.deleteMany({ where: { hostelId: hostel.id } }),
-      prisma.visitor.deleteMany({ where: { hostelId: hostel.id } }),
-      prisma.notice.deleteMany({ where: { hostelId: hostel.id } }),
-      prisma.hostel.delete({ where: { id: hostel.id } }),
-    ]);
-
-    await audit({ userId: req.auth!.id, action: "hostel.delete", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, oldValue: { name: hostel.name, code: hostel.code } });
+    await audit({ userId: req.auth!.id, action: "hostel.delete", entity: "Hostel", entityId: hostelId, hostelId, oldValue: { name: hostel.name, code: hostel.code } });
     res.json({ success: true });
   })
 );

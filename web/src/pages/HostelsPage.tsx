@@ -3,8 +3,9 @@ import { api, apiError } from "../lib/api";
 import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
+import { usePrompt } from "../context/PromptContext";
 import { useApi } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, ConfirmDialog, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconHostel, IconPlus } from "../components/icons";
 
@@ -13,6 +14,7 @@ const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyR
 export default function HostelsPage() {
   const { can } = useAuth();
   const { reload } = useHostels();
+  const prompt = usePrompt();
   const { data, loading, refetch } = useApi<any[]>("/hostels");
   const [open, setOpen] = useState(false);
   // null = creating a new hostel; otherwise the id of the hostel being edited.
@@ -20,9 +22,6 @@ export default function HostelsPage() {
   const [form, setForm] = useState<any>(BLANK);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  // Hostel queued for deletion (drives the confirm dialog).
-  const [toDelete, setToDelete] = useState<any>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const manage = can("hostels.manage");
 
@@ -54,18 +53,31 @@ export default function HostelsPage() {
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
 
-  async function confirmDelete() {
-    if (!toDelete) return;
-    setDeleting(true);
+  // Deleting a hostel wipes the whole branch, so we make the owner type its
+  // name to confirm — the standard guard against an accidental, irreversible
+  // teardown. No need to empty the branch by hand first.
+  async function askDelete(h: any) {
+    const typed = await prompt({
+      title: `Delete "${h.name}"?`,
+      message:
+        "This permanently deletes this hostel and EVERYTHING in it — residents, rooms, beds, payments, deposits, expenses, income, staff, inventory and every record. This cannot be undone.\n\nType the hostel name to confirm.",
+      label: "Hostel name",
+      placeholder: h.name,
+      confirmLabel: "Delete forever",
+      required: true,
+    });
+    if (typed === null) return; // cancelled
+    if (typed.trim().toLowerCase() !== String(h.name).trim().toLowerCase()) {
+      toast.error("The name didn't match — nothing was deleted.");
+      return;
+    }
     try {
-      await api.delete(`/hostels/${toDelete.id}`);
-      setToDelete(null);
+      await api.delete(`/hostels/${h.id}`);
+      toast.success(`"${h.name}" was deleted.`);
       await refetch(); await reload();
     } catch (err) {
-      // The server refuses to delete a hostel that still holds records and
-      // explains what to clear first — surface that message directly.
       toast.error(apiError(err));
-    } finally { setDeleting(false); }
+    }
   }
 
   if (loading) return <PageLoader />;
@@ -115,7 +127,7 @@ export default function HostelsPage() {
               {manage && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
                   <Button variant="secondary" className="flex-1" onClick={() => openEdit(h)}>Edit</Button>
-                  <Button variant="danger" className="flex-1" onClick={() => setToDelete(h)}>Delete</Button>
+                  <Button variant="danger" className="flex-1" onClick={() => askDelete(h)}>Delete</Button>
                 </div>
               )}
             </Card>
@@ -144,17 +156,6 @@ export default function HostelsPage() {
           <Button loading={saving} onClick={save}>{editingId ? "Save Changes" : "Create Hostel"}</Button>
         </div>
       </Modal>
-
-      <ConfirmDialog
-        open={!!toDelete}
-        title="Delete hostel?"
-        message={toDelete ? `Permanently delete "${toDelete.name}" and its rooms, beds, menus and inventory. This can't be undone. Hostels that still have residents or financial records can't be deleted — check those out first.` : ""}
-        confirmLabel="Delete hostel"
-        danger
-        loading={deleting}
-        onConfirm={confirmDelete}
-        onCancel={() => setToDelete(null)}
-      />
     </div>
   );
 }
