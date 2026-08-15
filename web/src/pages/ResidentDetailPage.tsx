@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -6,7 +6,9 @@ import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressPhoto, compressDocument } from "../lib/image";
-import { formatPKR, formatDate, titleCase } from "../lib/format";
+import { formatPKR, formatDate, formatDateTime, titleCase } from "../lib/format";
+import { elementToPdf } from "../lib/pdfExport";
+import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
@@ -15,8 +17,10 @@ const DOC_TYPES: [string, string][] = [
 
 export default function ResidentDetailPage() {
   const { id } = useParams();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const { data: r, loading, refetch } = useApi<any>(`/residents/${id}`);
+  const pdfRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState<"" | "save" | "share">("");
   const [pay, setPay] = useState(false);
   const [notice, setNotice] = useState(false);
   const [checkout, setCheckout] = useState(false);
@@ -100,6 +104,20 @@ export default function ResidentDetailPage() {
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
+  // Export the resident's full profile — personal details, accommodation and
+  // finances — as a real PDF document (saved to disk or shared on mobile).
+  async function exportProfile(mode: "save" | "share") {
+    if (!pdfRef.current) return;
+    setExporting(mode);
+    try {
+      const pdf = await elementToPdf(pdfRef.current);
+      const name = `Resident-${(r.fullName || "profile").replace(/\s+/g, "_")}-${String(r.id).slice(-6)}.pdf`;
+      if (mode === "save") await downloadFile(pdf, name);
+      else await shareFile(pdf, name);
+    } catch { alert("Could not create the PDF. Please try again."); }
+    finally { setExporting(""); }
+  }
+
   if (loading) return <PageLoader />;
   if (!r) return <EmptyState title="Resident not found" />;
 
@@ -113,6 +131,8 @@ export default function ResidentDetailPage() {
         actions={
           <div className="flex gap-2 flex-wrap">
             <Link to="/admissions" className="btn-secondary">← Back</Link>
+            <Button variant="secondary" loading={exporting === "save"} disabled={!!exporting} onClick={() => exportProfile("save")}>Export PDF</Button>
+            {canShareFiles() && <Button variant="secondary" loading={exporting === "share"} disabled={!!exporting} onClick={() => exportProfile("share")}>Share PDF</Button>}
             {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
             {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
             {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
@@ -383,6 +403,182 @@ export default function ResidentDetailPage() {
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setCheckout(false)}>Cancel</Button><Button variant="danger" loading={saving} onClick={finalizeCheckout}>Finalize Checkout</Button></div>
         </div>
       </Modal>
+
+      {/* Off-screen printable sheet — html2canvas captures this into the PDF. */}
+      <div aria-hidden className="fixed left-[-10000px] top-0 pointer-events-none" style={{ width: 760 }}>
+        <ResidentPdfSheet innerRef={pdfRef} r={r} company={user?.company?.name} />
+      </div>
+    </div>
+  );
+}
+
+// A clean, print-oriented rendering of the full resident record. Rendered
+// off-screen and rasterised into the exported PDF — kept dependency-free and
+// self-contained so it works in the browser and the Android WebView alike.
+function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<HTMLDivElement>; r: any; company?: string }) {
+  const typeLabel = ({ STUDENT: "Student", PROFESSIONAL: "Professional", DAILY: "Daily guest" } as Record<string, string>)[r.occupantType] ?? "Student";
+  const floor = r.bed?.room?.floor?.name;
+  const emergency = [r.emergencyName, r.emergencyRelation && `(${r.emergencyRelation})`, r.emergencyPhone].filter(Boolean).join(" ");
+
+  const personal: [string, any][] = [
+    ["Full name", r.fullName],
+    ["Status", titleCase(r.status)],
+    ["Resident type", typeLabel],
+    ["Guardian", r.guardianName],
+    ["Date of birth", r.dateOfBirth ? formatDate(r.dateOfBirth) : ""],
+    ["Gender", titleCase(r.gender)],
+    ["CNIC", r.cnic],
+    ["Phone", r.phone],
+    ["WhatsApp", r.whatsapp],
+    ["Email", r.email],
+    ["City", r.city],
+    ["Permanent address", r.permanentAddress],
+    ["Current address", r.currentAddress],
+    ["Emergency contact", emergency],
+  ];
+
+  const academic: [string, any][] = r.occupantType === "STUDENT"
+    ? [["University", r.university], ["Program", r.program], ["Student ID", r.studentId]]
+    : r.occupantType === "PROFESSIONAL"
+    ? [["Company", r.company], ["Occupation", r.occupation]]
+    : [];
+
+  const accommodation: [string, any][] = [
+    ["Hostel", r.hostel?.name],
+    ["Floor", floor],
+    ["Room", r.bed?.room?.name],
+    ["Bed", r.bed?.label],
+    ["Food plan", r.foodPlan?.name],
+    ["Admission date", r.admissionDate ? formatDate(r.admissionDate) : ""],
+    ["Check-in date", r.checkInDate ? formatDate(r.checkInDate) : ""],
+    ...(r.occupantType === "DAILY"
+      ? ([["Guests", r.guests ?? 1], ["Rate / night", formatPKR(r.dailyRate)], ["Expected checkout", r.expectedCheckout ? formatDate(r.expectedCheckout) : ""]] as [string, any][])
+      : ([["Monthly rent", formatPKR(r.monthlyRent)]] as [string, any][])),
+  ];
+
+  const Section = ({ title, rows }: { title: string; rows: [string, any][] }) => {
+    const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
+    if (!shown.length) return null;
+    return (
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid #e2e8f0", paddingBottom: 4, marginBottom: 8 }}>{title}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 24, rowGap: 6 }}>
+          {shown.map(([k, v]) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5, borderBottom: "1px dotted #eef2f6", paddingBottom: 4 }}>
+              <span style={{ color: "#94a3b8" }}>{k}</span>
+              <span style={{ color: "#334155", fontWeight: 600, textAlign: "right" }}>{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const th = { textAlign: "left" as const, fontSize: 10.5, color: "#94a3b8", fontWeight: 600, padding: "6px 8px", borderBottom: "1px solid #e2e8f0" };
+  const td = { fontSize: 12, color: "#334155", padding: "6px 8px", borderBottom: "1px solid #f1f5f9" };
+
+  return (
+    <div ref={innerRef} style={{ width: 760, background: "#fff", color: "#0f172a", padding: 32, fontFamily: "Arial, Helvetica, sans-serif", boxSizing: "border-box" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #0f766e", paddingBottom: 12 }}>
+        <div>
+          {company && <div style={{ fontSize: 20, fontWeight: 800, color: "#0f766e", lineHeight: 1.1 }}>{company}</div>}
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#475569" }}>{r.hostel?.name}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>RESIDENT PROFILE</div>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>Generated {formatDateTime(new Date())}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>Ref: {String(r.id).slice(-8).toUpperCase()}</div>
+        </div>
+      </div>
+
+      {/* Name + avatar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 16 }}>
+        <div style={{ height: 56, width: 56, borderRadius: "50%", background: "#ccfbf1", color: "#0f766e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 800 }}>{(r.fullName || "?").charAt(0).toUpperCase()}</div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{r.fullName}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>{typeLabel}{r.bed?.room?.name ? ` · Room ${r.bed.room.name}${r.bed?.label ? ` / Bed ${r.bed.label}` : ""}` : ""}</div>
+        </div>
+      </div>
+
+      {/* Financial summary cards */}
+      <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+        {[["Outstanding", formatPKR(r.outstanding), "#e11d48"], ["Deposit held", formatPKR(r.deposit?.amount ?? 0), "#0f172a"], ["Monthly rent", formatPKR(r.monthlyRent), "#0f172a"]].map(([label, value, color]) => (
+          <div key={label} style={{ flex: 1, border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px" }}>
+            <div style={{ fontSize: 10.5, color: "#94a3b8" }}>{label}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <Section title="Personal Information" rows={personal} />
+      {!!academic.length && <Section title={r.occupantType === "STUDENT" ? "Academic Details" : "Professional Details"} rows={academic} />}
+      <Section title="Accommodation" rows={accommodation} />
+
+      {/* Rent charges */}
+      {!!r.rentCharges?.length && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Rent Charges</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><th style={th}>Period</th><th style={th}>Amount</th><th style={th}>Paid</th><th style={th}>Balance</th><th style={th}>Status</th></tr></thead>
+            <tbody>
+              {r.rentCharges.map((c: any) => (
+                <tr key={c.id}>
+                  <td style={td}>{c.periodMonth}/{c.periodYear}</td>
+                  <td style={td}>{formatPKR(c.amount)}</td>
+                  <td style={td}>{formatPKR(c.amountPaid)}</td>
+                  <td style={{ ...td, color: c.balance > 0 ? "#e11d48" : "#334155", fontWeight: c.balance > 0 ? 700 : 400 }}>{formatPKR(c.balance)}</td>
+                  <td style={td}>{titleCase(c.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Payment history */}
+      {!!r.payments?.length && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Payment History</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><th style={th}>Date</th><th style={th}>Method</th><th style={th}>Reference</th><th style={{ ...th, textAlign: "right" }}>Amount</th></tr></thead>
+            <tbody>
+              {r.payments.map((p: any) => (
+                <tr key={p.id}>
+                  <td style={td}>{formatDate(p.paidAt)}</td>
+                  <td style={td}>{titleCase(p.method)}</td>
+                  <td style={td}>{p.reference || "—"}</td>
+                  <td style={{ ...td, textAlign: "right", fontWeight: 700, color: "#059669" }}>{formatPKR(p.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Deposit ledger */}
+      {!!r.deposit?.transactions?.length && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Security Deposit Ledger</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><th style={th}>Date</th><th style={th}>Type</th><th style={{ ...th, textAlign: "right" }}>Amount</th><th style={th}>Note</th></tr></thead>
+            <tbody>
+              {r.deposit.transactions.map((t: any) => (
+                <tr key={t.id}>
+                  <td style={td}>{formatDate(t.createdAt)}</td>
+                  <td style={td}>{titleCase(t.type)}</td>
+                  <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{formatPKR(t.amount)}</td>
+                  <td style={td}>{t.note || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 28, borderTop: "1px solid #e2e8f0", paddingTop: 8, fontSize: 10.5, color: "#94a3b8", textAlign: "center" }}>
+        This document was generated by {company || "the hostel management system"} on {formatDateTime(new Date())}. Figures reflect the most recent records at the time of export.
+      </div>
     </div>
   );
 }
