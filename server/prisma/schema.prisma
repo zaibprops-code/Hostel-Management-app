@@ -501,13 +501,42 @@ model ResidentDocument {
 
 // Uploaded file bytes stored in the database so they persist across server
 // restarts/redeploys without needing a separate storage service. Served
-// (public, unguessable id) via GET /files/:id.
+// (public, unguessable id) via GET /files/:id. Used as the zero-config local
+// dev fallback when Cloudflare R2 is not configured.
 model StoredFile {
   id        String   @id @default(cuid())
   data      Bytes
   mimeType  String
   fileName  String?
   createdAt DateTime @default(now())
+}
+
+// Authorization + metadata record for every file whose bytes live in Cloudflare
+// R2 (private bucket). This row — not the object itself — is what ties an R2
+// object key to the company/hostel/resident that owns it, so file access is
+// checked against the same RBAC the rest of the app uses. The stored reference
+// is "/files/r2/<key>". Database-served files (StoredFile) do not use this table.
+model FileObject {
+  id           String   @id @default(cuid())
+  key          String   @unique // R2 object key; also the "/files/r2/<key>" reference
+  companyId    String
+  hostelId     String? // null = company-level asset (e.g. a logo)
+  residentId   String? // set for resident-scoped files, so a portal resident can view their own
+  paymentId    String? // set for payment proofs, so attach can wire the reference back
+  kind         String // "resident.photo" | "resident.document" | "payment.proof" | ...
+  mimeType     String
+  fileName     String?
+  size         Int?
+  // PENDING once a presigned upload URL is issued; ACTIVE after the client
+  // confirms the upload succeeded. Only ACTIVE files are wired into a resource.
+  status       String   @default("ACTIVE")
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([hostelId])
+  @@index([residentId])
 }
 
 model Admission {

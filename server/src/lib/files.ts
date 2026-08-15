@@ -1,20 +1,33 @@
 import multer from "multer";
 import path from "path";
 import crypto from "crypto";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { prisma } from "./prisma";
 import { env } from "./env";
 
 // Shared file helpers. Files can live in one of two places:
-//   • Supabase Storage — when SUPABASE_URL + SUPABASE_SERVICE_KEY are set, so
-//     the database stays tiny and file space is effectively unlimited.
-//   • The database (StoredFile) — the zero-config default, served from
-//     /files/<id>. Existing DB-stored files keep working either way.
+//   • Cloudflare R2 (S3-compatible, PRIVATE bucket) — when the R2_* env vars are
+//     set. Bytes never pass through a public URL; every read goes through the
+//     authenticated, per-file-authorized /files/r2/<key> route. A FileObject row
+//     records the owning company/hostel/resident so access can be RBAC-checked.
+//   • The database (StoredFile) — the zero-config local-dev fallback, served
+//     from the public-by-unguessable-id /files/<id> route.
 
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const EXT_MIME: Record<string, string> = {
   ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
 };
+
+export function isAllowedMime(mime: string | null | undefined): boolean {
+  return !!mime && ALLOWED.has(mime);
+}
 
 // Some WebViews report a picked file with a generic mime type, so fall back to
 // the extension. Returns the resolved mime type, or null if unsupported.
@@ -36,56 +49,137 @@ export function makeUpload() {
   });
 }
 
-// A single shared uploader used by every route that accepts files.
+// A single shared uploader used by the legacy (through-API) upload routes.
 export const upload = makeUpload();
 
-// ---- Supabase Storage backend (optional) --------------------------------
+// ---- Cloudflare R2 (S3-compatible) backend ------------------------------
 
-let supabase: SupabaseClient | null = null;
-function storageClient(): SupabaseClient | null {
-  if (!env.supabase.url || !env.supabase.serviceKey) return null;
-  if (!supabase) {
-    supabase = createClient(env.supabase.url, env.supabase.serviceKey, { auth: { persistSession: false } });
-  }
-  return supabase;
+export function r2Configured(): boolean {
+  const r = env.r2;
+  return !!(r.accountId && r.accessKeyId && r.secretAccessKey && r.bucket);
 }
-const BUCKET = env.supabase.bucket;
-const publicMarker = `/storage/v1/object/public/${BUCKET}/`;
 
-function objectKey(originalName: string): string {
-  const ext = path.extname(originalName || "").toLowerCase();
+let client: S3Client | null = null;
+function r2(): S3Client {
+  if (!client) {
+    client = new S3Client({
+      region: "auto",
+      endpoint: `https://${env.r2.accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId: env.r2.accessKeyId, secretAccessKey: env.r2.secretAccessKey },
+      forcePathStyle: true,
+    });
+  }
+  return client;
+}
+const BUCKET = () => env.r2.bucket;
+
+const REF_PREFIX = "/files/r2/";
+export function isR2Ref(ref: string | null | undefined): boolean {
+  return !!ref && ref.startsWith(REF_PREFIX);
+}
+export function keyFromRef(ref: string): string {
+  return ref.slice(REF_PREFIX.length);
+}
+export function refForKey(key: string): string {
+  return `${REF_PREFIX}${key}`;
+}
+
+// A random, unguessable object key partitioned by year/month for easy browsing.
+export function makeKey(originalName: string | undefined, mime?: string): string {
+  let ext = path.extname(originalName || "").toLowerCase();
+  if (!ext) ext = mime === "application/pdf" ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
   const id = crypto.randomBytes(16).toString("hex");
   const now = new Date();
   return `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${id}${ext}`;
 }
 
+// Presigned URL for the browser to upload (PUT) bytes straight to R2. The
+// Content-Type is bound into the signature, so the client must send the same
+// header — nothing else can be uploaded under this URL.
+export async function presignPut(key: string, mime: string): Promise<string> {
+  return getSignedUrl(r2(), new PutObjectCommand({ Bucket: BUCKET(), Key: key, ContentType: mime }), {
+    expiresIn: env.r2.urlTtl,
+  });
+}
+
+// Short-lived presigned URL for reading (GET) an object. Optionally forces a
+// download with a given filename via Content-Disposition.
+export async function presignGet(key: string, opts?: { download?: boolean; fileName?: string | null }): Promise<string> {
+  const disposition = opts?.download
+    ? `attachment; filename="${(opts.fileName || "file").replace(/["\r\n]/g, "")}"`
+    : undefined;
+  return getSignedUrl(
+    r2(),
+    new GetObjectCommand({ Bucket: BUCKET(), Key: key, ResponseContentDisposition: disposition }),
+    { expiresIn: env.r2.urlTtl }
+  );
+}
+
+// Confirm an object exists (after a direct upload) and read its size. Returns
+// null when the object is missing.
+export async function headObject(key: string): Promise<{ size: number | null } | null> {
+  try {
+    const out = await r2().send(new HeadObjectCommand({ Bucket: BUCKET(), Key: key }));
+    return { size: out.ContentLength ?? null };
+  } catch {
+    return null;
+  }
+}
+
 // ---- Public API ---------------------------------------------------------
 
-// Persist an uploaded file's bytes and return a URL for it. Uses Supabase
-// Storage when configured, otherwise the database.
-export async function storeFile(file: Express.Multer.File): Promise<string> {
+export interface FileMeta {
+  companyId: string;
+  hostelId?: string | null;
+  residentId?: string | null;
+  paymentId?: string | null;
+  kind: string;
+  uploadedById?: string | null;
+}
+
+// Persist an uploaded file's bytes and return a reference for it. Used by the
+// legacy through-API upload routes and the public intake form. Uses R2 (with a
+// FileObject authorization record) when configured, otherwise the database.
+export async function storeFile(file: Express.Multer.File, meta: FileMeta): Promise<string> {
   const mime = resolveType(file) ?? file.mimetype;
-  const sb = storageClient();
-  if (sb) {
-    const key = objectKey(file.originalname);
-    const { error } = await sb.storage.from(BUCKET).upload(key, file.buffer, { contentType: mime, upsert: false });
-    if (error) throw new Error(`Storage upload failed: ${error.message}`);
-    return sb.storage.from(BUCKET).getPublicUrl(key).data.publicUrl;
+  if (r2Configured()) {
+    const key = makeKey(file.originalname, mime);
+    await r2().send(new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: file.buffer, ContentType: mime }));
+    await prisma.fileObject.create({
+      data: {
+        key,
+        companyId: meta.companyId,
+        hostelId: meta.hostelId ?? null,
+        residentId: meta.residentId ?? null,
+        paymentId: meta.paymentId ?? null,
+        kind: meta.kind,
+        mimeType: mime,
+        fileName: file.originalname,
+        size: file.size,
+        status: "ACTIVE",
+        uploadedById: meta.uploadedById ?? null,
+      },
+    });
+    return refForKey(key);
   }
   const blob = await prisma.storedFile.create({ data: { data: file.buffer, mimeType: mime, fileName: file.originalname } });
   return `/files/${blob.id}`;
 }
 
-// Delete the backing file for a URL, wherever it lives. No-op for anything else.
-export async function removeStoredFile(url: string | null | undefined): Promise<void> {
-  if (!url) return;
-  const sb = storageClient();
-  const idx = url.indexOf(publicMarker);
-  if (sb && idx !== -1) {
-    const key = decodeURIComponent(url.slice(idx + publicMarker.length));
-    await sb.storage.from(BUCKET).remove([key]);
+// Delete the backing file for a reference, wherever it lives, and its metadata.
+// No-op for anything unrecognised.
+export async function removeStoredFile(ref: string | null | undefined): Promise<void> {
+  if (!ref) return;
+  if (isR2Ref(ref)) {
+    const key = keyFromRef(ref);
+    try {
+      await r2().send(new DeleteObjectCommand({ Bucket: BUCKET(), Key: key }));
+    } catch {
+      /* best effort — still drop the metadata row below */
+    }
+    await prisma.fileObject.deleteMany({ where: { key } });
     return;
   }
-  const m = url.match(/^\/files\/([^/]+)$/);
+  const m = ref.match(/^\/files\/([^/]+)$/);
   if (m) await prisma.storedFile.deleteMany({ where: { id: m[1] } });
 }

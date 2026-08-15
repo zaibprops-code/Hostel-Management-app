@@ -39,14 +39,20 @@ export const env = {
   // the database, whose free Render tier is ~1 GB. Override with STORAGE_LIMIT_MB
   // if you upgrade the database.
   storageLimitMb: Number(process.env.STORAGE_LIMIT_MB ?? 1024),
-  // Supabase Storage (optional). When SUPABASE_URL + SUPABASE_SERVICE_KEY are
-  // set, uploads go to the storage bucket instead of the database — so the
-  // database stays tiny and file space is effectively unlimited. Leave blank to
-  // keep storing files in the database (the default).
-  supabase: {
-    url: (process.env.SUPABASE_URL ?? "").replace(/\/$/, ""),
-    serviceKey: process.env.SUPABASE_SERVICE_KEY ?? "",
-    bucket: process.env.SUPABASE_BUCKET ?? "hostel-files",
+  // Cloudflare R2 object storage (S3-compatible). When all of R2_ACCOUNT_ID,
+  // R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_BUCKET are set, uploaded files
+  // live in a PRIVATE R2 bucket and are served only through the authenticated,
+  // per-file-authorized /files/r2/<key> route (never a public URL). Leave blank
+  // to fall back to storing files in the database (local dev convenience).
+  // NOTE: this is file storage only — the Postgres database (DATABASE_URL /
+  // DIRECT_URL, on Supabase) is entirely separate and unaffected.
+  r2: {
+    accountId: process.env.R2_ACCOUNT_ID ?? "",
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
+    bucket: process.env.R2_BUCKET ?? "",
+    // How long a presigned upload/download URL stays valid (seconds).
+    urlTtl: Number(process.env.R2_URL_TTL ?? 300),
   },
   // Public address of the web app, used to build links in emails (e.g. the
   // password-reset link). Falls back to the CORS origin, then localhost.

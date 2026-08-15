@@ -72,7 +72,7 @@ router.post(
   intakeFiles,
   validateBody(intakeSchema),
   asyncHandler(async (req, res) => {
-    const hostel = await prisma.hostel.findUnique({ where: { intakeToken: req.params.token }, select: { id: true } });
+    const hostel = await prisma.hostel.findUnique({ where: { intakeToken: req.params.token }, select: { id: true, companyId: true } });
     if (!hostel) throw notFound("This link is invalid or has been turned off.");
     const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
@@ -86,14 +86,18 @@ router.post(
     // Profile photo (images only).
     const photo = files?.photo?.[0];
     if (photo && resolveType(photo)?.startsWith("image/")) {
-      const photoUrl = await storeFile(photo);
+      const photoUrl = await storeFile(photo, {
+        companyId: hostel.companyId, hostelId: hostel.id, residentId: resident.id, kind: "resident.photo",
+      });
       await prisma.resident.update({ where: { id: resident.id }, data: { photoUrl } });
     }
     // ID documents.
     for (const [field, type] of DOC_FIELDS) {
       const f = files?.[field]?.[0];
       if (f && resolveType(f)) {
-        const fileUrl = await storeFile(f);
+        const fileUrl = await storeFile(f, {
+          companyId: hostel.companyId, hostelId: hostel.id, residentId: resident.id, kind: "resident.document",
+        });
         await prisma.residentDocument.create({
           data: { residentId: resident.id, type, fileName: f.originalname, fileUrl, mimeType: resolveType(f) ?? f.mimetype },
         });

@@ -8,6 +8,7 @@ import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, Select, SearchButton, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressDocument } from "../lib/image";
+import { uploadFile } from "../lib/upload";
 import { elementToPng } from "../lib/capture";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 import { StatCard } from "../components/stats";
@@ -46,8 +47,7 @@ export default function PaymentsPage() {
     try {
       const { data } = await api.post("/payments", { residentId: payForm.residentId, amount: payForm.amount, method: payForm.method, reference: payForm.reference });
       if (payProof && data?.id) {
-        const fd = new FormData(); fd.append("file", await compressDocument(payProof));
-        await api.post(`/uploads/payment/${data.id}/proof`, fd).catch(() => {});
+        await uploadFile({ scope: "payment.proof", paymentId: data.id, file: await compressDocument(payProof) }).catch(() => {});
       }
       setPayOpen(false); setPage(1); await refetch();
     } catch (e) { setPayError(apiError(e)); } finally { setSavingPay(false); }
@@ -69,7 +69,7 @@ export default function PaymentsPage() {
   }
   async function uploadProof(id: string, file?: File) {
     if (!file) return;
-    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${id}/proof`, fd); await refetch(); }
+    try { await uploadFile({ scope: "payment.proof", paymentId: id, file: await compressDocument(file) }); await refetch(); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function voidPayment(id: string) {

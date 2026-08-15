@@ -3,14 +3,26 @@ import { accessibleHostelIds } from "../middleware/rbac";
 import { badRequest } from "./http";
 import { prisma } from "./prisma";
 
-// Given a list of "/files/<id>" URLs, returns a map of url → mime type so the
-// client knows how to render each stored file (image vs PDF).
+// Given a list of file references, returns a map of ref → mime type so the
+// client knows how to render each stored file (image vs PDF). Handles both R2
+// references ("/files/r2/<key>", from FileObject) and the database fallback
+// ("/files/<id>", from StoredFile).
 export async function fileMimes(urls: (string | null | undefined)[]): Promise<Record<string, string>> {
-  const ids = urls.filter((u): u is string => !!u && u.startsWith("/files/")).map((u) => u.slice("/files/".length));
-  if (ids.length === 0) return {};
-  const files = await prisma.storedFile.findMany({ where: { id: { in: ids } }, select: { id: true, mimeType: true } });
+  const refs = urls.filter((u): u is string => !!u);
+  const r2Keys = refs.filter((u) => u.startsWith("/files/r2/")).map((u) => u.slice("/files/r2/".length));
+  const dbIds = refs
+    .filter((u) => u.startsWith("/files/") && !u.startsWith("/files/r2/"))
+    .map((u) => u.slice("/files/".length));
+
   const map: Record<string, string> = {};
-  for (const f of files) map[`/files/${f.id}`] = f.mimeType;
+  if (r2Keys.length > 0) {
+    const objs = await prisma.fileObject.findMany({ where: { key: { in: r2Keys } }, select: { key: true, mimeType: true } });
+    for (const o of objs) map[`/files/r2/${o.key}`] = o.mimeType;
+  }
+  if (dbIds.length > 0) {
+    const files = await prisma.storedFile.findMany({ where: { id: { in: dbIds } }, select: { id: true, mimeType: true } });
+    for (const f of files) map[`/files/${f.id}`] = f.mimeType;
+  }
   return map;
 }
 

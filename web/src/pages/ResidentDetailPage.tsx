@@ -8,6 +8,7 @@ import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
 import FileViewer from "../components/FileViewer";
 import { compressPhoto, compressDocument } from "../lib/image";
+import { uploadFile } from "../lib/upload";
 import { formatPKR, formatDate, formatDateTime, titleCase } from "../lib/format";
 import { elementToPdf } from "../lib/pdfExport";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
@@ -48,15 +49,14 @@ export default function ResidentDetailPage() {
   async function uploadPhoto(file?: File) {
     if (!file) return;
     setUploading(true); setError("");
-    try { const fd = new FormData(); fd.append("file", await compressPhoto(file)); await api.post(`/uploads/resident/${id}/photo`, fd); await refetch(); }
+    try { await uploadFile({ scope: "resident.photo", residentId: id!, file: await compressPhoto(file) }); await refetch(); }
     catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function uploadDoc() {
     if (!docForm.file) return;
     setUploading(true); setError("");
     try {
-      const fd = new FormData(); fd.append("file", await compressDocument(docForm.file)); fd.append("type", docForm.type);
-      await api.post(`/uploads/resident/${id}/document`, fd);
+      await uploadFile({ scope: "resident.document", residentId: id!, documentType: docForm.type, file: await compressDocument(docForm.file) });
       setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
@@ -89,15 +89,14 @@ export default function ResidentDetailPage() {
     try {
       const { data } = await api.post("/payments", { residentId: id, ...payForm });
       if (payProof && data?.id) {
-        const fd = new FormData(); fd.append("file", await compressDocument(payProof));
-        await api.post(`/uploads/payment/${data.id}/proof`, fd).catch(() => {});
+        await uploadFile({ scope: "payment.proof", paymentId: data.id, file: await compressDocument(payProof) }).catch(() => {});
       }
       setPay(false); setPayForm({ amount: 0, method: "CASH", reference: "" }); setPayProof(null); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function uploadPaymentProof(paymentId: string, file?: File) {
     if (!file) return;
-    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${paymentId}/proof`, fd); await refetch(); toast.success("Receipt attached."); }
+    try { await uploadFile({ scope: "payment.proof", paymentId, file: await compressDocument(file) }); await refetch(); toast.success("Receipt attached."); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function giveNotice() {

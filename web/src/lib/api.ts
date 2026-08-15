@@ -53,11 +53,20 @@ export function getApiBase(): string {
 
 // Build an absolute URL for a server asset (e.g. "/uploads/xyz.jpg"). Uploads
 // are served from the API origin, one level above the "/api" base.
+//
+// Files in the private R2 bucket ("/files/r2/<key>") are served through an
+// authenticated route, but <img>/fetch can't send an Authorization header — so
+// the access token is passed as a `t` query param, which the route accepts.
 export function assetUrl(pathOrUrl: string | null | undefined): string {
   if (!pathOrUrl) return "";
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
   const origin = getApiBase().replace(/\/api$/, "");
-  return `${origin}${pathOrUrl}`;
+  let url = `${origin}${pathOrUrl}`;
+  if (pathOrUrl.startsWith("/files/r2/")) {
+    const token = tokenStore.access;
+    if (token) url += `${url.includes("?") ? "&" : "?"}t=${encodeURIComponent(token)}`;
+  }
+  return url;
 }
 
 export function setApiBase(input: string): void {
