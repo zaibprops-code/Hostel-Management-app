@@ -127,6 +127,7 @@ router.post(
           bedId: leadBedId,
           hostelId,
           status: "ACTIVE",
+          pendingReview: false, // admitting clears any self-intake review flag
           admissionDate: body.admissionDate,
           checkInDate: body.admissionDate,
           monthlyRent: isDaily ? 0 : body.monthlyRent,

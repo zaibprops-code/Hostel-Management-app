@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, notFound } from "../lib/http";
@@ -115,6 +116,27 @@ router.put(
     const hostel = await prisma.hostel.update({ where: { id: req.params.id }, data: req.body });
     await audit({ userId: req.auth!.id, action: "hostel.update", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, oldValue: before, newValue: req.body });
     res.json(hostel);
+  })
+);
+
+// POST /api/hostels/:id/intake-link — create (or rotate) the public
+// self-intake token for this hostel and return it. Sharing the resulting
+// /intake/:token link lets prospective residents submit their own details.
+router.post(
+  "/:id/intake-link",
+  requirePermission("hostels.manage"),
+  validateBody(z.object({ rotate: z.boolean().optional() }).optional()),
+  asyncHandler(async (req, res) => {
+    await assertHostelAccess(req, req.params.id);
+    const hostel = await prisma.hostel.findUnique({ where: { id: req.params.id } });
+    if (!hostel) throw notFound("Hostel not found");
+    let token = hostel.intakeToken;
+    if (!token || req.body?.rotate) {
+      token = crypto.randomBytes(16).toString("hex");
+      await prisma.hostel.update({ where: { id: hostel.id }, data: { intakeToken: token } });
+      await audit({ userId: req.auth!.id, action: "hostel.intake_link", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id });
+    }
+    res.json({ token });
   })
 );
 

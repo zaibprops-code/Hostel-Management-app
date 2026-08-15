@@ -53,6 +53,21 @@ export default function HostelsPage() {
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
 
+  // Generate (once) and copy the public resident-registration link for a hostel.
+  async function copyIntakeLink(h: any) {
+    try {
+      const { data } = await api.post(`/hostels/${h.id}/intake-link`, {});
+      const link = `${window.location.origin}/intake/${data.token}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success("Registration link copied — paste it into WhatsApp to share.");
+      } catch {
+        // Clipboard blocked (e.g. some in-app browsers): show it to copy by hand.
+        await prompt({ title: "Resident registration link", message: "Copy this link and share it with residents:", label: "Link", defaultValue: link, confirmLabel: "Done" });
+      }
+    } catch (err) { toast.error(apiError(err)); }
+  }
+
   // Deleting a hostel wipes the whole branch, so we make the owner type its
   // name to confirm — the standard guard against an accidental, irreversible
   // teardown. No need to empty the branch by hand first.
@@ -125,9 +140,12 @@ export default function HostelsPage() {
                 <div className="flex justify-between"><span className="text-slate-400">Contact</span><span className="font-medium text-slate-700">{h.contactNumber ?? "—"}</span></div>
               </div>
               {manage && (
-                <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
-                  <Button variant="secondary" className="flex-1" onClick={() => openEdit(h)}>Edit</Button>
-                  <Button variant="danger" className="flex-1" onClick={() => askDelete(h)}>Delete</Button>
+                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                  <Button variant="secondary" className="w-full" onClick={() => copyIntakeLink(h)}>🔗 Copy resident registration link</Button>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" className="flex-1" onClick={() => openEdit(h)}>Edit</Button>
+                    <Button variant="danger" className="flex-1" onClick={() => askDelete(h)}>Delete</Button>
+                  </div>
                 </div>
               )}
             </Card>

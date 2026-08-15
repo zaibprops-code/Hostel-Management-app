@@ -25,6 +25,9 @@ export default function ResidentDetailPage() {
   const { data: r, loading, refetch } = useApi<any>(`/residents/${id}`);
   const pdfRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState<"" | "save" | "share">("");
+  const [admitOpen, setAdmitOpen] = useState(false);
+  const [availBeds, setAvailBeds] = useState<any[]>([]);
+  const [admitForm, setAdmitForm] = useState<any>({ bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH" });
   const [pay, setPay] = useState(false);
   const [notice, setNotice] = useState(false);
   const [checkout, setCheckout] = useState(false);
@@ -108,6 +111,26 @@ export default function ResidentDetailPage() {
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
+  // Admit a reviewed (RESERVED) resident: pick an available bed and check them
+  // in via the standard admission workflow.
+  async function openAdmit() {
+    setError("");
+    try {
+      const { data } = await api.get(`/structure/available-beds?hostelId=${r.hostel.id}`);
+      setAvailBeds(data);
+      setAdmitForm({ bedId: data[0]?.id ?? "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: data[0]?.monthlyRent ?? r.monthlyRent ?? 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH" });
+      setAdmitOpen(true);
+    } catch (e) { toast.error(apiError(e)); }
+  }
+  async function admit() {
+    if (!admitForm.bedId) { setError("Please select a bed."); return; }
+    setSaving(true); setError("");
+    try {
+      await api.post("/admissions", { residentId: id, bedId: admitForm.bedId, admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, depositAmount: admitForm.depositAmount, initialPayment: admitForm.initialPayment, paymentMethod: admitForm.paymentMethod });
+      setAdmitOpen(false); toast.success("Resident admitted and bed assigned."); await refetch();
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+
   // Permanently remove a resident (mistaken entry, or a full purge after they
   // left). Checkout is the softer path that keeps their history.
   async function deleteResident() {
@@ -151,6 +174,7 @@ export default function ResidentDetailPage() {
             <Link to="/admissions" className="btn-secondary">← Back</Link>
             <Button variant="secondary" loading={exporting === "save"} disabled={!!exporting} onClick={() => exportProfile("save")}>Export PDF</Button>
             {canShareFiles() && <Button variant="secondary" loading={exporting === "share"} disabled={!!exporting} onClick={() => exportProfile("share")}>Share PDF</Button>}
+            {can("admissions.manage") && r.status === "RESERVED" && <Button onClick={openAdmit}>Admit / Assign Bed</Button>}
             {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
             {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
             {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
@@ -160,6 +184,11 @@ export default function ResidentDetailPage() {
         }
       />
 
+      {r.pendingReview && (
+        <Card className="p-4 mb-4 bg-amber-50 border-amber-200">
+          <p className="text-sm text-amber-800">🆕 This resident registered themselves through your intake link. Review their details below, then <b>Admit / Assign Bed</b> to check them in. Editing anything or admitting them clears this notice.</p>
+        </Card>
+      )}
       {portalDone && (
         <Card className="p-4 mb-4 bg-emerald-50 border-emerald-100">
           <p className="text-sm text-emerald-800">✅ Portal login created for <b>{portalDone}</b>. The resident can now sign in with that email and the password you set.</p>
@@ -420,6 +449,37 @@ export default function ResidentDetailPage() {
           <Input label="Inspection notes" value={coForm.inspectionNotes} onChange={(e) => setCoForm({ ...coForm, inspectionNotes: e.target.value })} />
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setCheckout(false)}>Cancel</Button><Button variant="danger" loading={saving} onClick={finalizeCheckout}>Finalize Checkout</Button></div>
+        </div>
+      </Modal>
+
+      {/* Admit / assign bed modal (for RESERVED residents) */}
+      <Modal open={admitOpen} onClose={() => setAdmitOpen(false)} title="Admit & Assign Bed">
+        <div className="space-y-3">
+          {!availBeds.length ? (
+            <p className="text-sm text-rose-600">No available beds in {r.hostel?.name}. Add a bed or free one first, then try again.</p>
+          ) : (
+            <>
+              <Select label="Bed" value={admitForm.bedId} onChange={(e) => { const b = availBeds.find((x) => x.id === e.target.value); setAdmitForm({ ...admitForm, bedId: e.target.value, monthlyRent: b?.monthlyRent ?? admitForm.monthlyRent }); }}>
+                {availBeds.map((b) => <option key={b.id} value={b.id}>{b.roomName} · {b.label} — {formatPKR(b.monthlyRent)}</option>)}
+              </Select>
+              <Input label="Admission date" type="date" value={admitForm.admissionDate} onChange={(e) => setAdmitForm({ ...admitForm, admissionDate: e.target.value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <MoneyInput label="Monthly rent" value={admitForm.monthlyRent} onChange={(n) => setAdmitForm({ ...admitForm, monthlyRent: n })} />
+                <MoneyInput label="Security deposit" value={admitForm.depositAmount} onChange={(n) => setAdmitForm({ ...admitForm, depositAmount: n })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <MoneyInput label="Initial payment (optional)" value={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
+                <Select label="Method" value={admitForm.paymentMethod} onChange={(e) => setAdmitForm({ ...admitForm, paymentMethod: e.target.value })}>
+                  {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
+                </Select>
+              </div>
+            </>
+          )}
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setAdmitOpen(false)}>Cancel</Button>
+            <Button loading={saving} disabled={!availBeds.length} onClick={admit}>Admit Resident</Button>
+          </div>
         </div>
       </Modal>
 

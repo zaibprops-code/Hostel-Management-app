@@ -47,6 +47,7 @@ router.get(
 
     const where: any = { ...scope };
     if (status) where.status = status;
+    if (req.query.pendingReview === "true") where.pendingReview = true;
     if (search) {
       where.OR = [
         { fullName: { contains: search, mode: "insensitive" } },
@@ -56,7 +57,7 @@ router.get(
       ];
     }
 
-    const [total, residents] = await Promise.all([
+    const [total, residents, pendingCount] = await Promise.all([
       prisma.resident.count({ where }),
       prisma.resident.findMany({
         where,
@@ -72,10 +73,13 @@ router.get(
           },
         },
       }),
+      // How many self-intake submissions in scope still await review (any filter).
+      prisma.resident.count({ where: { ...scope, pendingReview: true } }),
     ]);
 
     res.json({
       total,
+      pendingCount,
       page,
       pageSize,
       data: residents.map((r) => {
@@ -92,6 +96,7 @@ router.get(
         phone: r.phone,
         cnic: r.cnic,
         status: r.status,
+        pendingReview: r.pendingReview,
         monthlyRent: dec(r.monthlyRent),
         rentStatus: cycle?.status ?? null, // PAID | DUE | OVERDUE (monthly only)
         rentDueDate: cycle?.nextDueDate ?? null,
@@ -189,7 +194,8 @@ router.put(
     await assertHostelAccess(req, before.hostelId);
     const data = { ...req.body };
     if (data.email === "") delete data.email;
-    const resident = await prisma.resident.update({ where: { id: before.id }, data });
+    // Editing counts as reviewing a self-intake submission.
+    const resident = await prisma.resident.update({ where: { id: before.id }, data: { ...data, pendingReview: false } });
     await audit({ userId: req.auth!.id, action: "resident.update", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId });
     res.json(resident);
   })

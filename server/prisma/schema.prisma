@@ -318,6 +318,9 @@ model Hostel {
   // Rent for each month is payable from the 1st and must be paid by this day
   // (e.g. 10 = "1st to 10th"). After it, unpaid rent is overdue.
   rentDueDay         Int      @default(10)
+  // Random token for the public resident-intake link (/intake/:token). Null
+  // until the owner generates one; regenerating it invalidates the old link.
+  intakeToken        String?  @unique
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -441,6 +444,9 @@ model Resident {
   contractMonths Int?
   foodPlanId    String?
   status        ResidentStatus @default(ACTIVE)
+  // True when the record came from the public self-intake form and the owner
+  // has not yet reviewed it. Cleared when the owner edits or admits them.
+  pendingReview Boolean        @default(false)
   noticeDate    DateTime?
   expectedCheckout DateTime?
 

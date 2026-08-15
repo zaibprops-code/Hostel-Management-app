@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import IntakePage from "./pages/IntakePage";
 import DashboardPage from "./pages/DashboardPage";
 import HostelsPage from "./pages/HostelsPage";
 import RoomsPage from "./pages/RoomsPage";
@@ -49,6 +50,8 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Public resident self-intake form (no login) */}
+      <Route path="/intake/:token" element={<IntakePage />} />
 
       {/* Resident portal has its own full-screen chrome, outside the admin Layout */}
       <Route path="/portal" element={<Protected perm="portal.view"><PortalPage /></Protected>} />

@@ -52,8 +52,9 @@ export default function AdmissionsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const url = withQuery("/residents", scopeParam, `page=${page}`, search && `search=${encodeURIComponent(search)}`, status && `status=${status}`);
-  const { data, loading, refetch } = useApi<any>(url, [page, search, status, scopeParam]);
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const url = withQuery("/residents", scopeParam, `page=${page}`, search && `search=${encodeURIComponent(search)}`, status && `status=${status}`, pendingOnly && "pendingReview=true");
+  const { data, loading, refetch } = useApi<any>(url, [page, search, status, pendingOnly, scopeParam]);
 
   // New-admission form (creates the resident + optionally admits to a bed).
   const [open, setOpen] = useState(false);
@@ -182,8 +183,15 @@ export default function AdmissionsPage() {
         </>}
       />
 
+      {data?.pendingCount > 0 && (
+        <Card className="p-3 mb-4 bg-amber-50 border-amber-200 flex items-center justify-between gap-3">
+          <p className="text-sm text-amber-800">🆕 <b>{data.pendingCount}</b> new self-registration{data.pendingCount > 1 ? "s" : ""} awaiting your review. Open one to check the details and admit them.</p>
+          <Button variant="secondary" onClick={() => { setPendingOnly((v) => !v); setPage(1); }}>{pendingOnly ? "Show all" : "Review now"}</Button>
+        </Card>
+      )}
+
       {loading ? <PageLoader /> : !data?.data.length ? (
-        <EmptyState title="No residents yet" message="Tap “New Admission” to register your first resident and assign them a bed." icon={<IconAdmission className="h-12 w-12" />} />
+        <EmptyState title={pendingOnly ? "No submissions to review" : "No residents yet"} message={pendingOnly ? "New self-registrations will appear here." : "Tap “New Admission” to register your first resident and assign them a bed."} icon={<IconAdmission className="h-12 w-12" />} />
       ) : (
         <Card className="overflow-hidden">
           {/* Mobile: tap-friendly cards */}
@@ -196,7 +204,7 @@ export default function AdmissionsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-slate-800 truncate">{r.fullName}</p>
-                    <div className="flex items-center gap-1.5 shrink-0"><RentBadge status={r.rentStatus} /><StatusBadge status={r.status} /></div>
+                    <div className="flex items-center gap-1.5 shrink-0">{r.pendingReview && <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[11px] font-semibold">New</span>}<RentBadge status={r.rentStatus} /><StatusBadge status={r.status} /></div>
                   </div>
                   <p className="text-xs text-slate-400 truncate">{r.room ? `${r.room} · ${r.bed}` : "No bed"} · {rentLabel(r)}{r.occupantType === "DAILY" ? ` · ${r.guests || 1} guest${(r.guests || 1) > 1 ? "s" : ""}` : ""}</p>
                 </div>
@@ -217,7 +225,7 @@ export default function AdmissionsPage() {
                 {data.data.map((r: any) => (
                   <tr key={r.id} className="hover:bg-slate-50">
                     <td className="td">
-                      <p className="font-medium text-slate-800">{r.fullName}</p>
+                      <p className="font-medium text-slate-800 flex items-center gap-2">{r.fullName}{r.pendingReview && <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[11px] font-semibold">New</span>}</p>
                       <p className="text-xs text-slate-400">{OCCUPANT_LABEL[r.occupantType] ?? "Student"}{r.phone ? ` · ${r.phone}` : ""}</p>
                     </td>
                     <td className="td">{r.hostel.name}</td>

@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 
 import authRouter from "./modules/auth";
 import setupRouter from "./modules/setup";
+import publicRouter from "./modules/public";
 import hostelsRouter from "./modules/hostels";
 import structureRouter from "./modules/structure";
 import residentsRouter from "./modules/residents";
@@ -66,9 +67,12 @@ export function createApp() {
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 
-  // Public routes (no auth): first-run setup + login
+  // Public routes (no auth): first-run setup + login + resident self-intake.
   app.use("/api/setup", setupRouter);
   app.use("/api/auth", authLimiter, authRouter);
+  // Resident intake is public but spam-prone, so cap submissions per IP.
+  const intakeLimiter = rateLimit({ windowMs: 10 * 60_000, max: 20 });
+  app.use("/api/public", intakeLimiter, publicRouter);
 
   // Uploaded files. New uploads are stored in the database and served from
   // /files/:id (persists across restarts). The legacy static folder is kept
