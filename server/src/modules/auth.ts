@@ -172,10 +172,13 @@ router.post(
       console.error("[forgot-password] failed to send reset email:", err);
     }
 
-    // In development (no email set up), hand back the token so the flow is testable.
-    const devResetToken =
-      env.nodeEnv === "development" && !mailConfigured() ? token : undefined;
-    res.json({ ...generic, devResetToken });
+    // When no email server is configured, the owner would otherwise be locked
+    // out with no way to recover. In that case hand the reset link back so it
+    // can be shown on-screen — limited to the OWNER account so staff/resident
+    // logins can't be reset by anyone who merely knows the address.
+    const canSelfRecover = !mailConfigured() && user.role === "OWNER";
+    const devResetToken = canSelfRecover ? token : undefined;
+    res.json({ ...generic, devResetToken, resetUrl: canSelfRecover ? resetUrl : undefined });
   })
 );
 

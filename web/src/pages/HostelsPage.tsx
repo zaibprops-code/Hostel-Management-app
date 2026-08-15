@@ -3,27 +3,68 @@ import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi } from "../lib/useApi";
-import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
+import { PageHeader, Card, Button, Modal, ConfirmDialog, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
 import { IconHostel, IconPlus } from "../components/icons";
+
+const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" };
 
 export default function HostelsPage() {
   const { can } = useAuth();
   const { reload } = useHostels();
   const { data, loading, refetch } = useApi<any[]>("/hostels");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<any>({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" });
+  // null = creating a new hostel; otherwise the id of the hostel being edited.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<any>(BLANK);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Hostel queued for deletion (drives the confirm dialog).
+  const [toDelete, setToDelete] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const manage = can("hostels.manage");
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(BLANK);
+    setError("");
+    setOpen(true);
+  }
+  function openEdit(h: any) {
+    setEditingId(h.id);
+    setForm({
+      name: h.name ?? "", code: h.code ?? "", city: h.city ?? "", gender: h.gender ?? "MALE",
+      propertyRent: h.propertyRent ?? 0, propertyDeposit: h.propertyDeposit ?? 0,
+      noticePeriodDays: h.noticePeriodDays ?? 30, rentDueDay: h.rentDueDay ?? 10,
+      contactNumber: h.contactNumber ?? "", address: h.address ?? "",
+    });
+    setError("");
+    setOpen(true);
+  }
 
   async function save() {
     setSaving(true); setError("");
     try {
-      await api.post("/hostels", form);
+      if (editingId) await api.put(`/hostels/${editingId}`, form);
+      else await api.post("/hostels", form);
       setOpen(false);
-      setForm({ name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" });
       await refetch(); await reload();
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
+  }
+
+  async function confirmDelete() {
+    if (!toDelete) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/hostels/${toDelete.id}`);
+      setToDelete(null);
+      await refetch(); await reload();
+    } catch (err) {
+      // The server refuses to delete a hostel that still holds records and
+      // explains what to clear first — surface that message directly.
+      alert(apiError(err));
+    } finally { setDeleting(false); }
   }
 
   if (loading) return <PageLoader />;
@@ -33,7 +74,7 @@ export default function HostelsPage() {
       <PageHeader
         title="Hostels"
         subtitle="Manage your branches"
-        actions={can("hostels.manage") && <Button onClick={() => setOpen(true)}><IconPlus className="h-4 w-4" /> New Hostel</Button>}
+        actions={manage && <Button onClick={openCreate}><IconPlus className="h-4 w-4" /> New Hostel</Button>}
       />
       {!data?.length ? (
         <EmptyState title="No hostels yet" message="Create your first hostel branch to get started." icon={<IconHostel className="h-12 w-12" />} />
@@ -70,12 +111,18 @@ export default function HostelsPage() {
                 <div className="flex justify-between"><span className="text-slate-400">Property deposit</span><span className="font-medium text-slate-700">{formatPKR(h.propertyDeposit)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">Contact</span><span className="font-medium text-slate-700">{h.contactNumber ?? "—"}</span></div>
               </div>
+              {manage && (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => openEdit(h)}>Edit</Button>
+                  <Button variant="danger" className="flex-1" onClick={() => setToDelete(h)}>Delete</Button>
+                </div>
+              )}
             </Card>
           ))}
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="New Hostel">
+      <Modal open={open} onClose={() => setOpen(false)} title={editingId ? "Edit Hostel" : "New Hostel"}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Input label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -93,9 +140,20 @@ export default function HostelsPage() {
         <ErrorText>{error}</ErrorText>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button loading={saving} onClick={save}>Create Hostel</Button>
+          <Button loading={saving} onClick={save}>{editingId ? "Save Changes" : "Create Hostel"}</Button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        title="Delete hostel?"
+        message={toDelete ? `Permanently delete "${toDelete.name}" and its rooms, beds, menus and inventory. This can't be undone. Hostels that still have residents or financial records can't be deleted — check those out first.` : ""}
+        confirmLabel="Delete hostel"
+        danger
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }

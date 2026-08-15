@@ -7,7 +7,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [sent, setSent] = useState<{ message: string; devResetToken?: string } | null>(null);
+  const [sent, setSent] = useState<{ message: string; devResetToken?: string; resetUrl?: string } | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,21 +30,29 @@ export default function ForgotPasswordPage() {
         <p className="text-sm text-slate-500 mt-1 mb-6">Enter your email and we'll send you a link to reset your password.</p>
         {sent ? (
           <div className="space-y-4">
-            <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{sent.message}</p>
-            <p className="text-xs text-slate-500">
-              Check your inbox (and spam folder) for the reset link. The link is valid for 1 hour.
-            </p>
-            {sent.devResetToken && (
-              <p className="text-xs text-slate-500 break-all">
-                Developer mode (no email configured):{" "}
-                <Link to={`/reset-password?token=${sent.devResetToken}`} className="text-brand-600 hover:underline">
-                  open reset link
+            {sent.devResetToken ? (
+              <>
+                <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+                  No email server is set up on this system, so here's your reset link directly. It's valid for 1 hour.
+                </p>
+                <Link
+                  to={`/reset-password?token=${sent.devResetToken}`}
+                  className="btn-primary w-full justify-center"
+                >
+                  Set a new password →
                 </Link>
-              </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{sent.message}</p>
+                <p className="text-xs text-slate-500">
+                  Check your inbox (and spam folder) for the reset link. The link is valid for 1 hour.
+                </p>
+                <p className="text-xs text-slate-500">
+                  If you're a staff member, your hostel owner can also reset your password for you from the Users page.
+                </p>
+              </>
             )}
-            <p className="text-xs text-slate-500">
-              If you're a staff member, your hostel owner can also reset your password for you from the Users page.
-            </p>
             <Link to="/login" className="text-sm text-brand-600 hover:underline block">← Back to login</Link>
           </div>
         ) : (

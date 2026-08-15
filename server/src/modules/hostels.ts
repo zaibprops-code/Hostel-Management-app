@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, notFound } from "../lib/http";
+import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, accessibleHostelIds, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
@@ -115,6 +115,59 @@ router.put(
     const hostel = await prisma.hostel.update({ where: { id: req.params.id }, data: req.body });
     await audit({ userId: req.auth!.id, action: "hostel.update", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, oldValue: before, newValue: req.body });
     res.json(hostel);
+  })
+);
+
+// DELETE /api/hostels/:id — permanently remove a hostel branch. Refused while
+// the branch still holds people or financial records, so history is never
+// silently destroyed; the owner is told exactly what to clear (or to archive
+// the hostel instead). An empty branch is removed together with its structure,
+// menus, inventory and operational logs.
+router.delete(
+  "/:id",
+  requirePermission("hostels.manage"),
+  asyncHandler(async (req, res) => {
+    await assertHostelAccess(req, req.params.id);
+    const hostel = await prisma.hostel.findUnique({ where: { id: req.params.id } });
+    if (!hostel) throw notFound("Hostel not found");
+
+    const [residents, payments, expenses, incomes, staff, investments, loans] = await Promise.all([
+      prisma.resident.count({ where: { hostelId: hostel.id } }),
+      prisma.payment.count({ where: { hostelId: hostel.id } }),
+      prisma.expense.count({ where: { hostelId: hostel.id } }),
+      prisma.income.count({ where: { hostelId: hostel.id } }),
+      prisma.staff.count({ where: { hostelId: hostel.id } }),
+      prisma.investment.count({ where: { hostelId: hostel.id } }),
+      prisma.loan.count({ where: { hostelId: hostel.id } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (residents) blockers.push(`${residents} resident(s)`);
+    if (payments) blockers.push(`${payments} payment(s)`);
+    if (expenses) blockers.push(`${expenses} expense record(s)`);
+    if (incomes) blockers.push(`${incomes} income record(s)`);
+    if (staff) blockers.push(`${staff} staff member(s)`);
+    if (investments) blockers.push(`${investments} investment(s)`);
+    if (loans) blockers.push(`${loans} loan(s)`);
+    if (blockers.length) {
+      throw badRequest(
+        `This hostel still has ${blockers.join(", ")}. Check out or remove them first — deleting a hostel with records would erase that history.`
+      );
+    }
+
+    // No people or money records remain. Clear the operational logs that do not
+    // cascade, then delete the hostel — structure (floors/rooms/beds), menus,
+    // suppliers, purchases, inventory and access grants cascade with it.
+    await prisma.$transaction([
+      prisma.maintenanceTicket.deleteMany({ where: { hostelId: hostel.id } }),
+      prisma.complaint.deleteMany({ where: { hostelId: hostel.id } }),
+      prisma.visitor.deleteMany({ where: { hostelId: hostel.id } }),
+      prisma.notice.deleteMany({ where: { hostelId: hostel.id } }),
+      prisma.hostel.delete({ where: { id: hostel.id } }),
+    ]);
+
+    await audit({ userId: req.auth!.id, action: "hostel.delete", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, oldValue: { name: hostel.name, code: hostel.code } });
+    res.json({ success: true });
   })
 );
 
