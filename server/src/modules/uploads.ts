@@ -1,53 +1,12 @@
 import { Router } from "express";
-import multer from "multer";
-import path from "path";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
-import { env } from "../lib/env";
 import { audit } from "../lib/audit";
+import { upload, resolveType, storeFile, removeStoredFile } from "../lib/files";
 
 const router = Router();
-
-const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
-const EXT_MIME: Record<string, string> = {
-  ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
-};
-
-// Android's WebView often reports a picked PDF with a generic mime type
-// (application/octet-stream) or none at all, so fall back to the file
-// extension. Returns the resolved mime type, or null if unsupported.
-function resolveType(file: Express.Multer.File): string | null {
-  if (ALLOWED.has(file.mimetype)) return file.mimetype;
-  const ext = path.extname(file.originalname || "").toLowerCase();
-  return EXT_MIME[ext] ?? null;
-}
-
-// Files are kept in memory just long enough to write their bytes to the
-// database (so they survive server restarts without a separate storage service).
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: env.maxUploadMb * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (resolveType(file)) return cb(null, true);
-    cb(new Error("Unsupported file type — please choose an image or a PDF"));
-  },
-});
-
-// Persist an uploaded file's bytes and return its public URL ("/files/<id>").
-async function storeFile(file: Express.Multer.File): Promise<string> {
-  const blob = await prisma.storedFile.create({
-    data: { data: file.buffer, mimeType: resolveType(file) ?? file.mimetype, fileName: file.originalname },
-  });
-  return `/files/${blob.id}`;
-}
-
-// Delete the backing StoredFile for a "/files/<id>" url, if it is one.
-async function removeStoredFile(url: string | null | undefined): Promise<void> {
-  const m = url?.match(/^\/files\/([^/]+)$/);
-  if (m) await prisma.storedFile.deleteMany({ where: { id: m[1] } });
-}
 
 // POST /api/uploads/resident/:id/document — secure document upload
 router.post(

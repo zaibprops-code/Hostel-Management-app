@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
-import { makeUpload, resolveType, storeFile } from "../lib/files";
+import { upload, resolveType, storeFile } from "../lib/files";
 
 // Public, unauthenticated resident self-intake. A hostel owner shares the
 // /intake/:token link; a prospective resident fills the form and their details
@@ -50,7 +50,6 @@ const intakeSchema = z.object({
 // Optional photo + ID documents the applicant may attach, submitted together
 // with the text fields as one multipart request. Each is size/type-limited by
 // the shared uploader.
-const upload = makeUpload();
 const intakeFiles = upload.fields([
   { name: "photo", maxCount: 1 },
   { name: "cnicFront", maxCount: 1 },

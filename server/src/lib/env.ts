@@ -38,6 +38,15 @@ export const env = {
   // the database, whose free Render tier is ~1 GB. Override with STORAGE_LIMIT_MB
   // if you upgrade the database.
   storageLimitMb: Number(process.env.STORAGE_LIMIT_MB ?? 1024),
+  // Supabase Storage (optional). When SUPABASE_URL + SUPABASE_SERVICE_KEY are
+  // set, uploads go to the storage bucket instead of the database — so the
+  // database stays tiny and file space is effectively unlimited. Leave blank to
+  // keep storing files in the database (the default).
+  supabase: {
+    url: (process.env.SUPABASE_URL ?? "").replace(/\/$/, ""),
+    serviceKey: process.env.SUPABASE_SERVICE_KEY ?? "",
+    bucket: process.env.SUPABASE_BUCKET ?? "hostel-files",
+  },
   // Public address of the web app, used to build links in emails (e.g. the
   // password-reset link). Falls back to the CORS origin, then localhost.
   webAppUrl: process.env.WEB_APP_URL ?? process.env.CORS_ORIGIN ?? "http://localhost:5173",

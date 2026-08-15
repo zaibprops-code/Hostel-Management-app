@@ -69,6 +69,17 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
+      # Supabase Storage (optional) — move uploaded photos/documents OUT of the
+      # database into a storage bucket, so the free 1 GB Postgres tier is never
+      # filled by files. Create a public bucket, then paste these in the Render
+      # dashboard (Environment tab). Leave blank to keep files in the database.
+      # See SUPABASE.md for the 5-minute setup.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        sync: false
 
   # ---- Frontend website (static React build) ---------------------------
   - type: web
