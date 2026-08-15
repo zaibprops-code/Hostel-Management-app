@@ -29,10 +29,11 @@ export const env = {
   // redeploys — but you should still remove it afterwards. See DEPLOYMENT.md.
   resetDataToken: process.env.RESET_DATA ?? "",
   // Whether new hostel owners may self-register their own business account from
-  // the login screen (multi-tenant SaaS mode). Defaults to on; set
-  // ALLOW_SIGNUP=false to lock the app to the existing businesses only. The very
-  // first business can always be created, even when sign-ups are disabled.
-  allowSignup: process.env.ALLOW_SIGNUP !== "false",
+  // the login screen (multi-tenant SaaS mode). Secure by default: OFF unless
+  // ALLOW_SIGNUP=true is set explicitly, so a private admin-only deployment can
+  // never be left open by a missing env var. The very first business can always
+  // be created (first-run bootstrap), even when sign-ups are disabled.
+  allowSignup: process.env.ALLOW_SIGNUP === "true",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 25),
   // Storage budget shown in the app's Storage screen (MB). Files are kept in
   // the database, whose free Render tier is ~1 GB. Override with STORAGE_LIMIT_MB
