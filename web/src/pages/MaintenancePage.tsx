@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -22,7 +23,7 @@ export default function MaintenancePage() {
     try { await api.post("/maintenance", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function update(id: string, patch: any) {
-    try { await api.patch(`/maintenance/${id}`, patch); await refetch(); } catch (e) { alert(apiError(e)); }
+    try { await api.patch(`/maintenance/${id}`, patch); await refetch(); } catch (e) { toast.error(apiError(e)); }
   }
 
   if (loading) return <PageLoader />;

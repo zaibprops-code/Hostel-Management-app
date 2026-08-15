@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -24,7 +25,7 @@ export default function ComplaintsPage() {
     setSaving(true); setError("");
     try { await api.post("/complaints", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
-  async function updateStatus(id: string, status: string) { try { await api.patch(`/complaints/${id}`, { status }); await refetch(); } catch (e) { alert(apiError(e)); } }
+  async function updateStatus(id: string, status: string) { try { await api.patch(`/complaints/${id}`, { status }); await refetch(); } catch (e) { toast.error(apiError(e)); } }
   async function sendReply() {
     setSaving(true); setError("");
     try { await api.patch(`/complaints/${reply.id}`, { response: replyText, status: "IN_PROGRESS" }); setReply(null); setReplyText(""); await refetch(); }

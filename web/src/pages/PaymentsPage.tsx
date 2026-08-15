@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import { api, apiError, assetUrl } from "../lib/api";
+import { toast } from "../lib/toast";
+import { usePrompt } from "../context/PromptContext";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -13,6 +15,7 @@ import { formatPKR, formatDate, formatDateTime, titleCase, amountInWords } from 
 import { IconMoney, IconPlus } from "../components/icons";
 
 export default function PaymentsPage() {
+  const prompt = usePrompt();
   const { can } = useAuth();
   const { scopeParam } = useHostels();
   const [page, setPage] = useState(1);
@@ -51,7 +54,7 @@ export default function PaymentsPage() {
   }
 
   async function viewReceipt(id: string) {
-    try { const { data } = await api.get(`/payments/${id}/receipt`); setReceipt(data); } catch (e) { alert(apiError(e)); }
+    try { const { data } = await api.get(`/payments/${id}/receipt`); setReceipt(data); } catch (e) { toast.error(apiError(e)); }
   }
   async function exportReceipt(mode: "save" | "share") {
     if (!receiptRef.current) return;
@@ -61,18 +64,18 @@ export default function PaymentsPage() {
       const name = `Receipt-${(receipt.resident || "resident").replace(/\s+/g, "_")}-${String(receipt.id).slice(-6)}.png`;
       if (mode === "save") await downloadFile(png, name);
       else await shareFile(png, name);
-    } catch { alert("Could not create the receipt image. Please try again."); }
+    } catch { toast.error("Could not create the receipt image. Please try again."); }
     finally { setReceiptBusy(""); }
   }
   async function uploadProof(id: string, file?: File) {
     if (!file) return;
     try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${id}/proof`, fd); await refetch(); }
-    catch (e) { alert(apiError(e)); }
+    catch (e) { toast.error(apiError(e)); }
   }
   async function voidPayment(id: string) {
-    const reason = prompt("Reason for voiding this payment?");
+    const reason = await prompt({ title: "Void payment", message: "This reverses the payment. Add a reason for the record.", label: "Reason", required: true, confirmLabel: "Void payment" });
     if (!reason) return;
-    try { await api.post(`/payments/${id}/void`, { reason }); await refetch(); } catch (e) { alert(apiError(e)); }
+    try { await api.post(`/payments/${id}/void`, { reason }); toast.success("Payment voided."); await refetch(); } catch (e) { toast.error(apiError(e)); }
   }
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;

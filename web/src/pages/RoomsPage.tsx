@@ -1,6 +1,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -47,7 +48,7 @@ export default function RoomsPage() {
   }
   async function setBedStatus(bed: Bed, status: string) {
     try { await api.patch(`/structure/beds/${bed.id}/status`, { status }); await refetch(); await reload(); }
-    catch (e) { alert(apiError(e)); }
+    catch (e) { toast.error(apiError(e)); }
   }
 
   if (loading) return <PageLoader />;

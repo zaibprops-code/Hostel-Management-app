@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -19,7 +20,7 @@ export default function VisitorsPage() {
     setSaving(true); setError("");
     try { await api.post("/visitors", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
-  async function checkout(id: string) { try { await api.patch(`/visitors/${id}/checkout`); await refetch(); } catch (e) { alert(apiError(e)); } }
+  async function checkout(id: string) { try { await api.patch(`/visitors/${id}/checkout`); await refetch(); } catch (e) { toast.error(apiError(e)); } }
 
   if (loading) return <PageLoader />;
 

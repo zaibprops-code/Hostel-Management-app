@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
+import { usePrompt } from "../context/PromptContext";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -11,6 +13,7 @@ import { IconExpense, IconPlus } from "../components/icons";
 const CATEGORIES = ["PROPERTY_RENT", "ELECTRICITY", "GAS", "WATER", "INTERNET", "FOOD", "GROCERIES", "SALARIES", "REPAIRS", "MAINTENANCE", "CLEANING", "TRANSPORTATION", "MARKETING", "FURNITURE", "APPLIANCES", "SECURITY", "MISCELLANEOUS"];
 
 export default function ExpensesPage() {
+  const prompt = usePrompt();
   const { can } = useAuth();
   const { hostels, scopeParam } = useHostels();
   const [page, setPage] = useState(1);
@@ -27,8 +30,9 @@ export default function ExpensesPage() {
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function voidExpense(id: string) {
-    const reason = prompt("Reason for voiding?"); if (!reason) return;
-    try { await api.post(`/expenses/${id}/void`, { reason }); await refetch(); } catch (e) { alert(apiError(e)); }
+    const reason = await prompt({ title: "Void expense", message: "This reverses the expense. Add a reason for the record.", label: "Reason", required: true, confirmLabel: "Void expense" });
+    if (!reason) return;
+    try { await api.post(`/expenses/${id}/void`, { reason }); toast.success("Expense voided."); await refetch(); } catch (e) { toast.error(apiError(e)); }
   }
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;
 

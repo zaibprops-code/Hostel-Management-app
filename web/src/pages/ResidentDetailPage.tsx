@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
+import { toast } from "../lib/toast";
+import { useConfirm } from "../context/ConfirmContext";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
@@ -17,6 +19,7 @@ const DOC_TYPES: [string, string][] = [
 
 export default function ResidentDetailPage() {
   const { id } = useParams();
+  const confirm = useConfirm();
   const { can, user } = useAuth();
   const { data: r, loading, refetch } = useApi<any>(`/residents/${id}`);
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -54,19 +57,19 @@ export default function ResidentDetailPage() {
     } catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function deleteDoc(docId: string) {
-    if (!confirm("Delete this document?")) return;
-    try { await api.delete(`/uploads/resident/document/${docId}`); setViewing(null); await refetch(); }
-    catch (e) { alert(apiError(e)); }
+    if (!(await confirm({ title: "Delete document?", message: "This document will be permanently removed.", confirmLabel: "Delete", danger: true }))) return;
+    try { await api.delete(`/uploads/resident/document/${docId}`); setViewing(null); await refetch(); toast.success("Document deleted."); }
+    catch (e) { toast.error(apiError(e)); }
   }
   async function deletePhoto() {
-    if (!confirm("Remove this resident's profile photo?")) return;
-    try { await api.delete(`/uploads/resident/${id}/photo`); setViewing(null); await refetch(); }
-    catch (e) { alert(apiError(e)); }
+    if (!(await confirm({ title: "Remove photo?", message: "This resident's profile photo will be removed.", confirmLabel: "Remove", danger: true }))) return;
+    try { await api.delete(`/uploads/resident/${id}/photo`); setViewing(null); await refetch(); toast.success("Photo removed."); }
+    catch (e) { toast.error(apiError(e)); }
   }
   async function archiveFiles() {
-    if (!confirm("Archive will permanently DELETE this resident's photo and all documents from the server to free up space.\n\nMake sure you've downloaded anything you want to keep first. Continue?")) return;
-    try { const { data } = await api.delete(`/uploads/resident/${id}/files`); alert(`Archived. ${data.removed} file(s) removed to free space.`); await refetch(); }
-    catch (e) { alert(apiError(e)); }
+    if (!(await confirm({ title: "Archive files?", message: "This permanently DELETES this resident's photo and all documents from the server to free up space. Download anything you want to keep first.", confirmLabel: "Archive & delete", danger: true }))) return;
+    try { const { data } = await api.delete(`/uploads/resident/${id}/files`); toast.success(`Archived. ${data.removed} file(s) removed to free space.`); await refetch(); }
+    catch (e) { toast.error(apiError(e)); }
   }
 
   async function createPortalAccess() {
@@ -90,8 +93,8 @@ export default function ResidentDetailPage() {
   }
   async function uploadPaymentProof(paymentId: string, file?: File) {
     if (!file) return;
-    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${paymentId}/proof`, fd); await refetch(); }
-    catch (e) { alert(apiError(e)); }
+    try { const fd = new FormData(); fd.append("file", await compressDocument(file)); await api.post(`/uploads/payment/${paymentId}/proof`, fd); await refetch(); toast.success("Receipt attached."); }
+    catch (e) { toast.error(apiError(e)); }
   }
   async function giveNotice() {
     setSaving(true); setError("");
@@ -114,7 +117,7 @@ export default function ResidentDetailPage() {
       const name = `Resident-${(r.fullName || "profile").replace(/\s+/g, "_")}-${String(r.id).slice(-6)}.pdf`;
       if (mode === "save") await downloadFile(pdf, name);
       else await shareFile(pdf, name);
-    } catch { alert("Could not create the PDF. Please try again."); }
+    } catch { toast.error("Could not create the PDF. Please try again."); }
     finally { setExporting(""); }
   }
 

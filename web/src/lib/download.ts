@@ -1,4 +1,5 @@
 import { isNativeApp } from "./api";
+import { toast } from "./toast";
 
 // Download / share a server file. In the Android app we use native Capacitor
 // plugins (the browser's blob-download and Web Share APIs don't work inside the
@@ -43,11 +44,11 @@ export async function downloadFile(url: string, filename: string): Promise<void>
     for (const t of targets) {
       try {
         await Filesystem.writeFile({ path: name, data, directory: t.dir, recursive: true });
-        alert(`Saved "${name}" to your ${t.label} folder.`);
+        toast.success(`Saved "${name}" to your ${t.label} folder.`);
         return;
       } catch { /* try the next location */ }
     }
-    alert("Couldn't save the file to storage. Use the Share button to save it to Files, Drive, etc.");
+    toast.error("Couldn't save the file to storage. Use the Share button to save it to Files, Drive, etc.");
     return;
   }
 

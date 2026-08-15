@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
+import { usePrompt } from "../context/PromptContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, Select, ErrorText, PageLoader, Badge, EmptyState } from "../components/ui";
@@ -11,6 +13,7 @@ const ROLES = ["OWNER", "MANAGER", "ACCOUNTANT", "KITCHEN", "STAFF", "RESIDENT"]
 const GRANTABLE = ["finance.viewProfit", "capital.view", "capital.manage", "deposits.refund", "users.manage", "audit.view", "settings.manage"];
 
 export default function UsersPage() {
+  const prompt = usePrompt();
   const { hostels } = useHostels();
   const { data, loading, refetch } = useApi<any[]>("/users");
   const [open, setOpen] = useState(false);
@@ -50,9 +53,18 @@ export default function UsersPage() {
     setOpen(true);
   }
   async function resetPassword(u: any) {
-    const pw = prompt(`Set a new password for ${u.name} (min 8 chars):`);
+    const pw = await prompt({
+      title: "Reset password",
+      message: `Set a new password for ${u.name}.`,
+      label: "New password",
+      type: "password",
+      required: true,
+      minLength: 8,
+      confirmLabel: "Update password",
+    });
     if (!pw) return;
-    try { await api.post(`/users/${u.id}/reset-password`, { newPassword: pw }); alert("Password updated."); } catch (e) { alert(apiError(e)); }
+    try { await api.post(`/users/${u.id}/reset-password`, { newPassword: pw }); toast.success(`Password updated for ${u.name}.`); }
+    catch (e) { toast.error(apiError(e)); }
   }
 
   if (loading) return <PageLoader />;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, apiError } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi } from "../lib/useApi";
@@ -63,7 +64,7 @@ export default function HostelsPage() {
     } catch (err) {
       // The server refuses to delete a hostel that still holds records and
       // explains what to clear first — surface that message directly.
-      alert(apiError(err));
+      toast.error(apiError(err));
     } finally { setDeleting(false); }
   }
 

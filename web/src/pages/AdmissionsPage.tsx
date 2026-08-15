@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
+import { toast } from "../lib/toast";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, SearchButton, ErrorText, PageLoader, StatusBadge, EmptyState } from "../components/ui";
@@ -158,7 +159,7 @@ export default function AdmissionsPage() {
         } catch { failures.push(DOC_TYPES.find((t) => t[0] === d.type)?.[1] ?? "document"); }
       }
       if (failures.length) {
-        alert(`Resident saved, but these could not be uploaded: ${failures.join(", ")}. You can add them from the resident's profile.`);
+        toast.error(`Resident saved, but these could not be uploaded: ${failures.join(", ")}. You can add them from the resident's profile.`);
       }
 
       setOpen(false); setPage(1); await refetch();
