@@ -20,9 +20,11 @@ services:
     # --include=dev keeps build tools (tsc, prisma, tsx) available in prod install.
     # Build only generates the client + compiles (no DB access needed here).
     buildCommand: npm install --include=dev && npm --workspace server run db:generate && npm --workspace server run build
-    # Create/patch tables at start-up (idempotent). No demo data is loaded — the
-    # app starts empty and asks the owner to set up their business on first visit.
-    startCommand: npm --workspace server run db:push && npm --workspace server run start
+    # Create/patch tables at start-up (idempotent). --accept-data-loss lets the
+    # schema sync proceed non-interactively instead of aborting the deploy when a
+    # column/table changes. No demo data is loaded — the app starts empty and
+    # asks the owner to set up their business on first visit.
+    startCommand: npm --workspace server run db:push:deploy && npm --workspace server run start
     envVars:
       - key: NODE_ENV
         value: production
