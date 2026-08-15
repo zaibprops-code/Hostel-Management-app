@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, apiError } from "../lib/api";
+import { compressPhoto, compressDocument } from "../lib/image";
 import { Card, Button, Input, Select, ErrorText, Spinner } from "../components/ui";
 
 // Public, no-login resident self-intake form reached via a hostel's shared
@@ -18,6 +19,7 @@ export default function IntakePage() {
   const [state, setState] = useState<"loading" | "ok" | "invalid">("loading");
   const [info, setInfo] = useState<{ hostelName: string; companyName: string } | null>(null);
   const [form, setForm] = useState<any>(BLANK);
+  const [files, setFiles] = useState<{ photo: File | null; cnicFront: File | null; cnicBack: File | null; studentCard: File | null }>({ photo: null, cnicFront: null, cnicBack: null, studentCard: null });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -36,10 +38,14 @@ export default function IntakePage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setSaving(true);
     try {
-      const payload = { ...form };
-      if (!payload.email) delete payload.email;
-      if (!payload.dateOfBirth) delete payload.dateOfBirth;
-      await api.post(`/public/intake/${token}`, payload);
+      // Text fields + optional files go up together as one multipart request.
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => { if (v !== "" && v != null) fd.append(k, v as string); });
+      if (files.photo) fd.append("photo", await compressPhoto(files.photo));
+      if (files.cnicFront) fd.append("cnicFront", await compressDocument(files.cnicFront));
+      if (files.cnicBack) fd.append("cnicBack", await compressDocument(files.cnicBack));
+      if (form.occupantType === "STUDENT" && files.studentCard) fd.append("studentCard", await compressDocument(files.studentCard));
+      await api.post(`/public/intake/${token}`, fd);
       setDone(true);
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
@@ -125,6 +131,15 @@ export default function IntakePage() {
           </Card>
 
           <Card className="p-5 space-y-3 mt-4">
+            <h2 className="text-sm font-semibold text-brand-700 uppercase tracking-wide">Photos &amp; documents</h2>
+            <p className="text-xs text-slate-400 -mt-1">Optional but recommended — it speeds up your check-in. Photos of your ID are fine.</p>
+            <FilePick label="Your photo" file={files.photo} accept="image/*" onPick={(f) => setFiles((s) => ({ ...s, photo: f }))} />
+            <FilePick label="CNIC — front" file={files.cnicFront} accept="image/*,application/pdf" onPick={(f) => setFiles((s) => ({ ...s, cnicFront: f }))} />
+            <FilePick label="CNIC — back" file={files.cnicBack} accept="image/*,application/pdf" onPick={(f) => setFiles((s) => ({ ...s, cnicBack: f }))} />
+            {isStudent && <FilePick label="Student / University card" file={files.studentCard} accept="image/*,application/pdf" onPick={(f) => setFiles((s) => ({ ...s, studentCard: f }))} />}
+          </Card>
+
+          <Card className="p-5 space-y-3 mt-4">
             <h2 className="text-sm font-semibold text-brand-700 uppercase tracking-wide">Emergency contact</h2>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Name" value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} />
@@ -141,5 +156,19 @@ export default function IntakePage() {
         </form>
       </div>
     </div>
+  );
+}
+
+// A single labelled file picker showing the chosen file's name (or a prompt).
+function FilePick({ label, file, accept, onPick }: { label: string; file: File | null; accept: string; onPick: (f: File | null) => void }) {
+  return (
+    <label className="block">
+      <span className="label">{label}</span>
+      <span className="input flex items-center justify-between cursor-pointer text-slate-500 gap-2">
+        <span className="truncate">{file ? file.name : "Choose a photo or file…"}</span>
+        <span className="text-brand-600 text-sm font-medium shrink-0">{file ? "Change" : "Browse"}</span>
+        <input type="file" accept={accept} className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+      </span>
+    </label>
   );
 }

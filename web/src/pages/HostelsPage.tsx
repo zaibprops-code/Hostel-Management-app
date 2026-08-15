@@ -7,6 +7,7 @@ import { usePrompt } from "../context/PromptContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
+import { qrSvg } from "../lib/qr";
 import { IconHostel, IconPlus } from "../components/icons";
 
 const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" };
@@ -22,6 +23,8 @@ export default function HostelsPage() {
   const [form, setForm] = useState<any>(BLANK);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Registration-link + QR modal.
+  const [intake, setIntake] = useState<{ hostelName: string; link: string; svg: string } | null>(null);
 
   const manage = can("hostels.manage");
 
@@ -53,19 +56,36 @@ export default function HostelsPage() {
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
 
-  // Generate (once) and copy the public resident-registration link for a hostel.
-  async function copyIntakeLink(h: any) {
+  // Generate (once) the public resident-registration link for a hostel and open
+  // the share modal (link + printable QR code).
+  async function openIntake(h: any) {
     try {
       const { data } = await api.post(`/hostels/${h.id}/intake-link`, {});
       const link = `${window.location.origin}/intake/${data.token}`;
-      try {
-        await navigator.clipboard.writeText(link);
-        toast.success("Registration link copied — paste it into WhatsApp to share.");
-      } catch {
-        // Clipboard blocked (e.g. some in-app browsers): show it to copy by hand.
-        await prompt({ title: "Resident registration link", message: "Copy this link and share it with residents:", label: "Link", defaultValue: link, confirmLabel: "Done" });
-      }
+      setIntake({ hostelName: h.name, link, svg: qrSvg(link) });
     } catch (err) { toast.error(apiError(err)); }
+  }
+  async function copyIntakeLink() {
+    if (!intake) return;
+    try { await navigator.clipboard.writeText(intake.link); toast.success("Link copied — paste it into WhatsApp to share."); }
+    catch { toast.error("Couldn't copy automatically — tap and hold the link to copy it."); }
+  }
+  // Open a print-friendly page with the QR + link so it can be printed or saved
+  // as a PDF and stuck at the entrance.
+  function printIntake() {
+    if (!intake) return;
+    const w = window.open("", "_blank", "width=480,height=680");
+    if (!w) { toast.error("Please allow pop-ups to print the QR code."); return; }
+    w.document.write(
+      `<!doctype html><title>${intake.hostelName} — Registration</title>` +
+      `<div style="font-family:system-ui,sans-serif;text-align:center;padding:40px">` +
+      `<h1 style="font-size:22px;margin:0 0 4px">${intake.hostelName}</h1>` +
+      `<p style="color:#555;margin:0 0 20px">Scan to register as a resident</p>` +
+      `<div style="width:300px;margin:0 auto">${intake.svg}</div>` +
+      `<p style="color:#777;font-size:12px;word-break:break-all;margin-top:20px">${intake.link}</p>` +
+      `</div><script>window.onload=function(){window.print()}</script>`
+    );
+    w.document.close();
   }
 
   // Deleting a hostel wipes the whole branch, so we make the owner type its
@@ -141,7 +161,7 @@ export default function HostelsPage() {
               </div>
               {manage && (
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
-                  <Button variant="secondary" className="w-full" onClick={() => copyIntakeLink(h)}>🔗 Copy resident registration link</Button>
+                  <Button variant="secondary" className="w-full" onClick={() => openIntake(h)}>🔗 Resident registration link &amp; QR</Button>
                   <div className="flex gap-2">
                     <Button variant="secondary" className="flex-1" onClick={() => openEdit(h)}>Edit</Button>
                     <Button variant="danger" className="flex-1" onClick={() => askDelete(h)}>Delete</Button>
@@ -173,6 +193,23 @@ export default function HostelsPage() {
           <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
           <Button loading={saving} onClick={save}>{editingId ? "Save Changes" : "Create Hostel"}</Button>
         </div>
+      </Modal>
+
+      <Modal open={!!intake} onClose={() => setIntake(null)} title="Resident registration link">
+        {intake && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Share this with prospective residents of <b>{intake.hostelName}</b>. They fill in their own details (and can attach their CNIC/photo), and it lands in your app for you to review and admit.
+            </p>
+            <div className="mx-auto w-56 h-56 [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: intake.svg }} />
+            <div className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 break-all text-center">{intake.link}</div>
+            <div className="flex gap-2">
+              <Button variant="secondary" className="flex-1" onClick={copyIntakeLink}>Copy link</Button>
+              <Button className="flex-1" onClick={printIntake}>Print QR</Button>
+            </div>
+            <p className="text-xs text-slate-400 text-center">Print the QR and stick it at your entrance, or send the link on WhatsApp.</p>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
+import { makeUpload, resolveType, storeFile } from "../lib/files";
 
 // Public, unauthenticated resident self-intake. A hostel owner shares the
 // /intake/:token link; a prospective resident fills the form and their details
@@ -46,17 +47,60 @@ const intakeSchema = z.object({
   studentId: z.string().optional(),
 });
 
+// Optional photo + ID documents the applicant may attach, submitted together
+// with the text fields as one multipart request. Each is size/type-limited by
+// the shared uploader.
+const upload = makeUpload();
+const intakeFiles = upload.fields([
+  { name: "photo", maxCount: 1 },
+  { name: "cnicFront", maxCount: 1 },
+  { name: "cnicBack", maxCount: 1 },
+  { name: "studentCard", maxCount: 1 },
+]);
+
+const DOC_FIELDS: [string, "CNIC_FRONT" | "CNIC_BACK" | "STUDENT_CARD"][] = [
+  ["cnicFront", "CNIC_FRONT"],
+  ["cnicBack", "CNIC_BACK"],
+  ["studentCard", "STUDENT_CARD"],
+];
+
 // POST /api/public/intake/:token — a prospective resident submits their own
-// details. Never assigns a bed or touches money; the owner reviews and admits.
+// details (and, optionally, their photo + CNIC/ID images). Never assigns a bed
+// or touches money; the owner reviews and admits. Multer parses the multipart
+// body first so validateBody sees the text fields.
 router.post(
   "/intake/:token",
+  intakeFiles,
   validateBody(intakeSchema),
   asyncHandler(async (req, res) => {
     const hostel = await prisma.hostel.findUnique({ where: { intakeToken: req.params.token }, select: { id: true } });
     if (!hostel) throw notFound("This link is invalid or has been turned off.");
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+
     const data = { ...req.body } as Record<string, unknown>;
     if (data.email === "") delete data.email;
-    await prisma.resident.create({ data: { ...data, hostelId: hostel.id, status: "RESERVED", pendingReview: true } as any });
+
+    const resident = await prisma.resident.create({
+      data: { ...data, hostelId: hostel.id, status: "RESERVED", pendingReview: true } as any,
+    });
+
+    // Profile photo (images only).
+    const photo = files?.photo?.[0];
+    if (photo && resolveType(photo)?.startsWith("image/")) {
+      const photoUrl = await storeFile(photo);
+      await prisma.resident.update({ where: { id: resident.id }, data: { photoUrl } });
+    }
+    // ID documents.
+    for (const [field, type] of DOC_FIELDS) {
+      const f = files?.[field]?.[0];
+      if (f && resolveType(f)) {
+        const fileUrl = await storeFile(f);
+        await prisma.residentDocument.create({
+          data: { residentId: resident.id, type, fileName: f.originalname, fileUrl, mimeType: resolveType(f) ?? f.mimetype },
+        });
+      }
+    }
+
     res.status(201).json({ success: true });
   })
 );
