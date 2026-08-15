@@ -58,6 +58,31 @@ router.put(
   })
 );
 
+// DELETE /api/structure/rooms/:id — remove a room and its (unoccupied) beds.
+router.delete(
+  "/rooms/:id",
+  requirePermission("rooms.manage"),
+  asyncHandler(async (req, res) => {
+    const room = await prisma.room.findUnique({
+      where: { id: req.params.id },
+      include: { beds: { include: { resident: { select: { id: true } } } } },
+    });
+    if (!room) throw notFound("Room not found");
+    await assertHostelAccess(req, room.hostelId);
+    const occupied = room.beds.filter((b) => b.resident).length;
+    if (occupied) throw conflict(`This room has ${occupied} occupied bed(s). Check those residents out first.`);
+    const bedIds = room.beds.map((b) => b.id);
+    // Clear past admission records that point at these beds, then delete the
+    // room (its beds cascade away with it).
+    await prisma.$transaction([
+      prisma.admission.deleteMany({ where: { bedId: { in: bedIds } } }),
+      prisma.room.delete({ where: { id: room.id } }),
+    ]);
+    await audit({ userId: req.auth!.id, action: "room.delete", entity: "Room", entityId: room.id, hostelId: room.hostelId, oldValue: { name: room.name } });
+    res.json({ success: true });
+  })
+);
+
 // ---- Beds ---------------------------------------------------------------
 
 const bedStatuses = ["AVAILABLE", "RESERVED", "OCCUPIED", "MAINTENANCE", "BLOCKED"] as const;
@@ -96,6 +121,24 @@ router.patch(
     const updated = await prisma.bed.update({ where: { id: bed.id }, data: { status: req.body.status } });
     await audit({ userId: req.auth!.id, action: "bed.status", entity: "Bed", entityId: bed.id, hostelId: bed.hostelId, oldValue: { status: bed.status }, newValue: { status: req.body.status } });
     res.json(updated);
+  })
+);
+
+// DELETE /api/structure/beds/:id — remove a single (unoccupied) bed.
+router.delete(
+  "/beds/:id",
+  requirePermission("rooms.manage"),
+  asyncHandler(async (req, res) => {
+    const bed = await prisma.bed.findUnique({ where: { id: req.params.id }, include: { resident: { select: { id: true } } } });
+    if (!bed) throw notFound("Bed not found");
+    await assertHostelAccess(req, bed.hostelId);
+    if (bed.resident) throw conflict("This bed is assigned to a resident. Check the resident out first.");
+    await prisma.$transaction([
+      prisma.admission.deleteMany({ where: { bedId: bed.id } }),
+      prisma.bed.delete({ where: { id: bed.id } }),
+    ]);
+    await audit({ userId: req.auth!.id, action: "bed.delete", entity: "Bed", entityId: bed.id, hostelId: bed.hostelId, oldValue: { label: bed.label } });
+    res.json({ success: true });
   })
 );
 

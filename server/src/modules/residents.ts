@@ -212,6 +212,50 @@ router.patch(
   })
 );
 
+// DELETE /api/residents/:id — permanently remove a resident and their own
+// stay/financial records (payments, rent charges, deposit, admissions,
+// checkout, documents). Hostel-level records (income such as damage charges,
+// complaints, tickets, visitors) are kept but unlinked. The occupied bed, if
+// any, is freed. For someone who simply left, prefer Checkout — it keeps the
+// full history; deletion is for mistaken entries or a full purge.
+router.delete(
+  "/:id",
+  requirePermission("residents.manage"),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+
+    await prisma.$transaction(async (tx) => {
+      // Free the bed the resident currently holds.
+      if (resident.bedId) {
+        await tx.bed.update({ where: { id: resident.bedId }, data: { status: "AVAILABLE" } });
+      }
+      // Keep hostel-level records but detach them from the resident.
+      await tx.income.updateMany({ where: { residentId: resident.id }, data: { residentId: null } });
+      await tx.complaint.updateMany({ where: { residentId: resident.id }, data: { residentId: null } });
+      await tx.maintenanceTicket.updateMany({ where: { residentId: resident.id }, data: { residentId: null } });
+      await tx.visitor.updateMany({ where: { residentId: resident.id }, data: { residentId: null } });
+      // Remove the resident's own records (payments cascade their allocations,
+      // the deposit cascades its ledger; documents & food attendance cascade
+      // with the resident row itself).
+      await tx.payment.deleteMany({ where: { residentId: resident.id } });
+      await tx.rentCharge.deleteMany({ where: { residentId: resident.id } });
+      await tx.securityDeposit.deleteMany({ where: { residentId: resident.id } });
+      await tx.checkout.deleteMany({ where: { residentId: resident.id } });
+      await tx.admission.deleteMany({ where: { residentId: resident.id } });
+      await tx.resident.delete({ where: { id: resident.id } });
+      // Remove the linked resident-portal login, if one was created.
+      if (resident.userId) {
+        await tx.user.deleteMany({ where: { id: resident.userId, role: "RESIDENT" } });
+      }
+    });
+
+    await audit({ userId: req.auth!.id, action: "resident.delete", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, oldValue: { fullName: resident.fullName } });
+    res.json({ success: true });
+  })
+);
+
 // POST /api/residents/:id/portal-access — give a resident their own login so
 // they can use the resident self-service portal.
 router.post(

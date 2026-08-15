@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { api, apiError } from "../lib/api";
 import { toast } from "../lib/toast";
+import { useConfirm } from "../context/ConfirmContext";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
@@ -21,6 +22,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function RoomsPage() {
+  const confirm = useConfirm();
   const { can } = useAuth();
   const { hostels, scopeParam, reload } = useHostels();
   const { data, loading, refetch } = useApi<Room[]>(withQuery("/structure/map", scopeParam), [scopeParam]);
@@ -48,6 +50,19 @@ export default function RoomsPage() {
   }
   async function setBedStatus(bed: Bed, status: string) {
     try { await api.patch(`/structure/beds/${bed.id}/status`, { status }); await refetch(); await reload(); }
+    catch (e) { toast.error(apiError(e)); }
+  }
+  async function deleteBed(bed: Bed) {
+    if (bed.resident) { toast.error("This bed is occupied. Check the resident out first."); return; }
+    if (!(await confirm({ title: "Delete bed?", message: `Delete bed "${bed.label}"? This can't be undone.`, confirmLabel: "Delete bed", danger: true }))) return;
+    try { await api.delete(`/structure/beds/${bed.id}`); toast.success("Bed deleted."); await refetch(); await reload(); }
+    catch (e) { toast.error(apiError(e)); }
+  }
+  async function deleteRoom(room: Room) {
+    const occupied = room.beds.filter((b) => b.resident).length;
+    if (occupied) { toast.error("This room has occupied beds. Check those residents out first."); return; }
+    if (!(await confirm({ title: "Delete room?", message: `Delete "${room.name}" and its ${room.beds.length} bed(s)? This can't be undone.`, confirmLabel: "Delete room", danger: true }))) return;
+    try { await api.delete(`/structure/rooms/${room.id}`); toast.success("Room deleted."); await refetch(); await reload(); }
     catch (e) { toast.error(apiError(e)); }
   }
 
@@ -85,14 +100,23 @@ export default function RoomsPage() {
                   <h3 className="font-semibold text-slate-800">{room.name}</h3>
                   <p className="text-xs text-slate-400">{room.hostel.name} · {room.floor}</p>
                 </div>
-                <span className="text-xs text-slate-400">{room.beds.filter((b) => b.status === "OCCUPIED").length}/{room.beds.length} full</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">{room.beds.filter((b) => b.status === "OCCUPIED").length}/{room.beds.length} full</span>
+                  {can("rooms.manage") && (
+                    <button onClick={() => deleteRoom(room)} className="text-xs font-medium text-slate-300 hover:text-rose-600" title="Delete room">✕</button>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {room.beds.map((bed) => (
                   <div key={bed.id} className={clsx("rounded-lg border p-2.5 text-xs", STATUS_STYLE[bed.status])}>
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">{bed.label}</span>
-                      <IconBed className="h-4 w-4 opacity-60" />
+                      {can("rooms.manage") && !bed.resident ? (
+                        <button onClick={() => deleteBed(bed)} className="text-sm leading-none opacity-50 hover:opacity-100 hover:text-rose-600" title="Delete bed">✕</button>
+                      ) : (
+                        <IconBed className="h-4 w-4 opacity-60" />
+                      )}
                     </div>
                     <p className="mt-1 truncate font-medium">{bed.resident ? bed.resident.fullName : bed.status.charAt(0) + bed.status.slice(1).toLowerCase()}</p>
                     <p className="opacity-70">{formatPKR(bed.monthlyRent)}</p>

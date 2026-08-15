@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
 import { toast } from "../lib/toast";
 import { useConfirm } from "../context/ConfirmContext";
@@ -19,6 +19,7 @@ const DOC_TYPES: [string, string][] = [
 
 export default function ResidentDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const confirm = useConfirm();
   const { can, user } = useAuth();
   const { data: r, loading, refetch } = useApi<any>(`/residents/${id}`);
@@ -107,6 +108,20 @@ export default function ResidentDetailPage() {
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
+  // Permanently remove a resident (mistaken entry, or a full purge after they
+  // left). Checkout is the softer path that keeps their history.
+  async function deleteResident() {
+    const ok = await confirm({
+      title: "Delete resident?",
+      message: `Permanently delete ${r.fullName} and all their payments, rent charges, deposit and documents. This can't be undone. For someone who has simply left, use Checkout instead — it keeps the full record.`,
+      confirmLabel: "Delete permanently",
+      danger: true,
+    });
+    if (!ok) return;
+    try { await api.delete(`/residents/${id}`); toast.success(`${r.fullName} was deleted.`); navigate("/admissions"); }
+    catch (e) { toast.error(apiError(e)); }
+  }
+
   // Export the resident's full profile — personal details, accommodation and
   // finances — as a real PDF document (saved to disk or shared on mobile).
   async function exportProfile(mode: "save" | "share") {
@@ -140,6 +155,7 @@ export default function ResidentDetailPage() {
             {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
             {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
             {can("residents.manage") && active && <Button variant="danger" onClick={() => setCheckout(true)}>Checkout</Button>}
+            {can("residents.manage") && <Button variant="secondary" className="text-rose-600" onClick={deleteResident}>Delete</Button>}
           </div>
         }
       />
