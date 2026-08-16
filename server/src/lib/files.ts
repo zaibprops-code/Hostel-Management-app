@@ -11,6 +11,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { prisma } from "./prisma";
 import { env } from "./env";
+import { ApiError } from "./http";
 
 // Shared file helpers. Files can live in one of two places:
 //   • Cloudflare R2 (S3-compatible, PRIVATE bucket) — when the R2_* env vars are
@@ -67,6 +68,11 @@ function r2(): S3Client {
       endpoint: `https://${env.r2.accountId}.r2.cloudflarestorage.com`,
       credentials: { accessKeyId: env.r2.accessKeyId, secretAccessKey: env.r2.secretAccessKey },
       forcePathStyle: true,
+      // Cloudflare R2 does not accept the CRC32 integrity checksums that recent
+      // AWS SDK versions add to uploads by default (it rejects the request).
+      // Only compute a checksum when the operation actually requires one.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
   }
   return client;
@@ -144,7 +150,19 @@ export async function storeFile(file: Express.Multer.File, meta: FileMeta): Prom
   const mime = resolveType(file) ?? file.mimetype;
   if (r2Configured()) {
     const key = makeKey(file.originalname, mime);
-    await r2().send(new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: file.buffer, ContentType: mime }));
+    try {
+      await r2().send(new PutObjectCommand({ Bucket: BUCKET(), Key: key, Body: file.buffer, ContentType: mime }));
+    } catch (err) {
+      // Turn a raw S3/R2 failure into a clear, actionable message (shown to the
+      // user and logged in full) instead of a generic 500. The short code names
+      // the cause: NoSuchBucket → wrong R2_BUCKET; SignatureDoesNotMatch/
+      // InvalidAccessKeyId → wrong key/secret; EPROTO → wrong R2_ACCOUNT_ID.
+      const e = err as { name?: string; code?: string; message?: string };
+      const code = e.name || e.code || "UnknownError";
+      // eslint-disable-next-line no-console
+      console.error("R2 upload failed:", { code, bucket: BUCKET(), message: e.message });
+      throw new ApiError(502, `Could not save the uploaded file to storage (${code}). Please check the R2 settings.`);
+    }
     await prisma.fileObject.create({
       data: {
         key,
