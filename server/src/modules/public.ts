@@ -49,6 +49,20 @@ const intakeSchema = z.object({
   emergencyName: z.string().optional(),
   emergencyPhone: z.string().optional(),
   emergencyRelation: z.string().optional(),
+  guardianPhone: optionalText,
+  nationality: optionalText,
+  bloodGroup: optionalText,
+  vehicle: optionalText,
+  medicalNotes: z.string().optional(),
+  howHeard: optionalText,
+  expectedMoveIn: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.date().optional()
+  ),
+  expectedStayMonths: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().min(0).max(120).optional()
+  ),
   occupantType: z.enum(["STUDENT", "PROFESSIONAL", "DAILY"]).optional(),
   university: z.string().optional(),
   program: z.string().optional(),

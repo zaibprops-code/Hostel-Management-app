@@ -31,6 +31,25 @@ body {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Intake form: staggered section reveal + celebratory success pop. */
+@keyframes intakeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes intakePop {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { opacity: 1; transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+@keyframes intakeRing {
+  0% { opacity: 0.6; transform: scale(0.8); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[intakeIn_0\.5s_ease-out_both\],
+  [style*="intakeIn"] { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+
 /* Safe-area helpers for notches / gesture bars on phones. */
 .safe-top {
   padding-top: env(safe-area-inset-top);

@@ -436,6 +436,16 @@ model Resident {
   emergencyPhone  String?
   emergencyRelation String?
 
+  // Extra details collected on the self-intake form (all optional).
+  guardianPhone      String?
+  nationality        String?
+  bloodGroup         String?
+  vehicle            String?   // parking: "Bike ABC-123", "Car", "None", …
+  medicalNotes       String?   // allergies / conditions the hostel should know
+  howHeard           String?   // marketing: how they found the hostel
+  expectedMoveIn     DateTime?
+  expectedStayMonths Int?
+
   occupantType OccupantType @default(STUDENT)
   university   String?
   program      String?

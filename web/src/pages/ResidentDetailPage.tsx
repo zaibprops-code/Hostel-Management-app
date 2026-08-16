@@ -253,6 +253,18 @@ export default function ResidentDetailPage() {
               ["Guardian", r.guardianName], ["Phone", r.phone], ["CNIC", r.cnic], ["City", r.city],
               ...(r.occupantType === "STUDENT" ? [["University", r.university], ["Program", r.program]] : []),
               ...(r.occupantType === "PROFESSIONAL" ? [["Company", r.company], ["Occupation", r.occupation]] : []),
+              // Extra self-intake details — shown only when the resident provided them.
+              ...([
+                ["Guardian phone", r.guardianPhone],
+                ["Blood group", r.bloodGroup],
+                ["Nationality", r.nationality],
+                ["Vehicle", r.vehicle],
+                ["Emergency", [r.emergencyName, r.emergencyPhone].filter(Boolean).join(" · ")],
+                ["Expected move-in", r.expectedMoveIn ? formatDate(r.expectedMoveIn) : ""],
+                ["Expected stay", r.expectedStayMonths ? `${r.expectedStayMonths} months` : ""],
+                ["Medical notes", r.medicalNotes],
+                ["Heard via", r.howHeard],
+              ].filter((row) => row[1])),
               ["Food Plan", r.foodPlan?.name],
               ["Admission", formatDate(r.admissionDate)],
               ...(r.occupantType === "DAILY"
