@@ -299,13 +299,22 @@ function SelectField({ label, children, ...rest }: React.SelectHTMLAttributes<HT
 // Circular profile-photo picker with live preview + camera support.
 function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
   const url = useObjectUrl(file);
+  const [broken, setBroken] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => setBroken(false), [file]); // a new pick gets a fresh chance to preview
   return (
     <div className="flex flex-col items-center gap-2">
       <button type="button" onClick={() => ref.current?.click()}
         className="group relative h-28 w-28 overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200">
-        {url ? (
-          <img src={url} alt="Your photo" className="h-full w-full object-cover" />
+        {url && !broken ? (
+          <img src={url} alt="Your photo" className="h-full w-full object-cover" onError={() => setBroken(true)} />
+        ) : file ? (
+          // Photo attached but the browser can't render it (e.g. an iPhone HEIC).
+          // Confirm it's included so the user isn't left thinking it failed.
+          <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-emerald-50 text-emerald-600">
+            <span className="text-2xl">✓</span>
+            <span className="text-[11px] font-semibold">Photo added</span>
+          </span>
         ) : (
           <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
             <span className="text-2xl">👤</span>
@@ -327,7 +336,9 @@ function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | n
 // Document picker with an image thumbnail (or PDF chip) preview.
 function DocPicker({ label, file, onPick }: { label: string; file: File | null; onPick: (f: File | null) => void }) {
   const url = useObjectUrl(file);
+  const [broken, setBroken] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => setBroken(false), [file]);
   const isPdf = file && !file.type.startsWith("image/");
   return (
     <div>
@@ -335,7 +346,7 @@ function DocPicker({ label, file, onPick }: { label: string; file: File | null; 
       {file ? (
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2">
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100">
-            {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">📄</span>}
+            {url && !broken ? <img src={url} alt="" className="h-full w-full object-cover" onError={() => setBroken(true)} /> : <span className="text-xl">📄</span>}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-700">{file.name}</p>
