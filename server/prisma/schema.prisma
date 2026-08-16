@@ -3,23 +3,18 @@
 
 generator client {
   provider = "prisma-client-js"
-  // "native" builds the engine for the local/dev machine; "rhel-openssl-3.0.x"
-  // builds the one Vercel's serverless (AWS Lambda) runtime needs. Both are
-  // generated so the same client works locally and when deployed to Vercel.
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  // Build the query engine for the local/deploy machine (Render's Node runtime
+  // is standard Linux, covered by "native").
+  binaryTargets = ["native"]
 }
 
 datasource db {
   provider = "postgresql"
-  // Runtime queries use the pooled connection (Supabase PgBouncer, port 6543,
-  // with ?pgbouncer=true) — safe for serverless where many short-lived function
-  // instances open connections.
-  url      = env("DATABASE_URL")
-  // Migrations / `prisma db push` need a direct, non-pooled connection (Supabase
-  // port 5432) because PgBouncer's transaction mode can't run schema DDL. This is
-  // only used by the Prisma CLI, never at runtime. Set DIRECT_URL wherever you
-  // run migrations; it can be omitted on hosts that never run schema changes.
-  directUrl = env("DIRECT_URL")
+  // Single connection string for both runtime queries and migrations. On
+  // Supabase, use the "Session pooler" connection string (port 5432): it works
+  // over IPv4 (which hosts like Render need) and, unlike the transaction pooler
+  // (6543), supports the schema DDL that `prisma migrate deploy` runs at start-up.
+  url = env("DATABASE_URL")
 }
 
 // ---------------------------------------------------------------------------

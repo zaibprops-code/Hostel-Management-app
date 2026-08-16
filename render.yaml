@@ -1,37 +1,39 @@
-# Render Blueprint — deploys EVERYTHING (database + backend + website) from this
-# repo with one click and no values to paste. In Render, use the
-# "Deploy to Render" button in the README (or New + → Blueprint → this repo).
-
-databases:
-  # Managed PostgreSQL database, auto-created and auto-connected to the API.
-  - name: hostel-db
-    databaseName: hostel
-    user: hostel
-    plan: free
+# Render Blueprint — deploys the WHOLE app (API + website) as ONE free service.
+# In Render: New + → Blueprint → pick this repo. You'll be asked to paste a few
+# values (marked "sync: false" below); everything else is set automatically.
+#
+# Database  : Supabase Postgres (free) — paste DATABASE_URL when prompted.
+# Files     : Cloudflare R2 (free, private) — paste the four R2_* values.
+# See SETUP.md for the 15-minute, copy-paste setup.
 
 services:
-  # ---- Backend API (Node/Express) --------------------------------------
+  # ---- One service: Express API + the built React website ----------------
   - type: web
-    name: hostel-api
+    name: hostel-app
     runtime: node
     plan: free
     autoDeploy: true
     healthCheckPath: /api/health
-    # --include=dev keeps build tools (tsc, prisma, tsx) available in prod install.
-    # Build only generates the client + compiles (no DB access needed here).
-    buildCommand: npm install --include=dev && npm --workspace server run db:generate && npm --workspace server run build
-    # Create/patch tables at start-up (idempotent). --accept-data-loss lets the
-    # schema sync proceed non-interactively instead of aborting the deploy when a
-    # column/table changes. No demo data is loaded — the app starts empty and
-    # asks the owner to set up their business on first visit.
-    startCommand: npm --workspace server run db:push:deploy && npm --workspace server run start
+    # Install everything (incl. build tools), generate the Prisma client, then
+    # compile the server AND build the website. Render handles npm workspaces
+    # correctly, so the whole monorepo installs in one step.
+    buildCommand: >-
+      npm install --include=dev &&
+      npm --workspace server run db:generate &&
+      npm --workspace server run build &&
+      npm --workspace web run build
+    # Apply pending Prisma migrations (creates all tables on a fresh database;
+    # idempotent and NON-destructive — no --accept-data-loss), then start.
+    startCommand: npm --workspace server run db:deploy && npm --workspace server run start
     envVars:
       - key: NODE_ENV
         value: production
+      # Supabase Postgres connection string. Use the "Session pooler" string
+      # (port 5432) from Supabase → Connect → ORMs/Session. Paste it in the
+      # Render dashboard (or when the Blueprint prompts you).
       - key: DATABASE_URL
-        fromDatabase:
-          name: hostel-db
-          property: connectionString
+        sync: false
+      # Auth secrets — generated once, kept private, never in git.
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -40,25 +42,32 @@ services:
         value: 15m
       - key: JWT_REFRESH_EXPIRES
         value: 7d
+      # API and website are the SAME origin now, so CORS isn't needed for the
+      # web app. "*" is kept so the optional native mobile app can also connect.
       - key: CORS_ORIGIN
         value: "*"
       - key: MAX_UPLOAD_MB
         value: "10"
-      # Private, invite-only app: no public self-sign-up. Only the owner can add
-      # users and hand out logins. (Set to "true" to allow new owners to
-      # self-register — e.g. if running this as a service for many businesses.)
+      # Private, invite-only app: no public self-sign-up. Only the owner adds
+      # users. (Set "true" only to run this as multi-tenant SaaS.)
       - key: ALLOW_SIGNUP
         value: "false"
-      # Public website address — used to build the link inside reset emails.
+      # ---- Cloudflare R2 file storage (private bucket) -------------------
+      # Paste these four from your Cloudflare R2 setup (see R2_SETUP.md). With
+      # all four set, uploads go to the private R2 bucket and are served only
+      # through the authenticated, per-file-authorized /files/r2/<key> route.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      # ---- Password-reset email (optional) -------------------------------
+      # Fill these only if you want password-reset emails. Leave blank to skip.
       - key: WEB_APP_URL
-        value: https://hostel-web-us71.onrender.com
-      # The API pings this URL every ~10 min so the free instance never sleeps
-      # (avoids the cold-start delay). Should be this API's own public address.
-      - key: KEEP_ALIVE_URL
-        value: https://hostel-api-3fu5.onrender.com
-      # Password-reset email (optional). Fill these in the Render dashboard
-      # (Environment tab) — they're marked sync:false so secrets aren't stored
-      # in git. See DEPLOYMENT.md → "Password-reset email". Leave blank to skip.
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -69,30 +78,3 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
-      # Supabase Storage (optional) — move uploaded photos/documents OUT of the
-      # database into a storage bucket, so the free 1 GB Postgres tier is never
-      # filled by files. Create a public bucket, then paste these in the Render
-      # dashboard (Environment tab). Leave blank to keep files in the database.
-      # See SUPABASE.md for the 5-minute setup.
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: SUPABASE_BUCKET
-        sync: false
-
-  # ---- Frontend website (static React build) ---------------------------
-  - type: web
-    name: hostel-web
-    runtime: static
-    autoDeploy: true
-    buildCommand: npm install --include=dev && npm --workspace web run build
-    staticPublishPath: web/dist
-    envVars:
-      # The frontend is built to talk to this backend address.
-      - key: VITE_API_HOST
-        value: hostel-api-3fu5.onrender.com
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html

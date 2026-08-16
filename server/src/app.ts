@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import path from "path";
+import fs from "fs";
 import { env } from "./lib/env";
 import { authenticate } from "./middleware/auth";
 import { errorHandler, notFoundHandler } from "./middleware/error";
@@ -108,6 +109,40 @@ export function createApp() {
   app.use("/api/portal", portalRouter);
   app.use("/api/uploads", uploadsRouter);
   app.use("/api/storage", storageRouter);
+
+  // ---- Serve the built React website (single-service production deploy) ----
+  // In production, one Render service hosts BOTH the API and the website, so
+  // they share a single origin (no CORS, one URL to remember). Locate the web
+  // build relative to this compiled file, with fallbacks for whichever working
+  // directory the process was started from.
+  if (env.nodeEnv === "production") {
+    const candidates = [
+      path.join(__dirname, "..", "..", "web", "dist"), // server/dist → repo/web/dist
+      path.join(process.cwd(), "web", "dist"), // cwd = repo root
+      path.join(process.cwd(), "..", "web", "dist"), // cwd = server/
+    ];
+    const webDist = candidates.find((p) => fs.existsSync(path.join(p, "index.html")));
+    if (webDist) {
+      app.use(express.static(webDist));
+      // SPA fallback: serve index.html for any non-API/file GET route so client-
+      // side routes (e.g. /login, /residents) work on refresh/deep-link.
+      app.get("*", (req, res, next) => {
+        if (
+          req.path.startsWith("/api") ||
+          req.path.startsWith("/files") ||
+          req.path.startsWith("/uploads")
+        ) {
+          return next();
+        }
+        res.sendFile(path.join(webDist, "index.html"));
+      });
+      // eslint-disable-next-line no-console
+      console.log(`🌐 Serving website from ${webDist}`);
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn("⚠️  Web build not found — API will run without serving the website.");
+    }
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);
