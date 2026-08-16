@@ -22,7 +22,7 @@ type Files = { photo: File | null; cnicFront: File | null; cnicBack: File | null
 export default function IntakePage() {
   const { token } = useParams();
   const [state, setState] = useState<"loading" | "ok" | "invalid">("loading");
-  const [info, setInfo] = useState<{ hostelName: string; city?: string; companyName: string } | null>(null);
+  const [info, setInfo] = useState<{ hostelName: string; city?: string; companyName: string; gender?: string | null } | null>(null);
   const [form, setForm] = useState<Form>(BLANK);
   const [files, setFiles] = useState<Files>({ photo: null, cnicFront: null, cnicBack: null, studentCard: null });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -34,7 +34,11 @@ export default function IntakePage() {
     (async () => {
       try {
         const { data } = await api.get(`/public/intake/${token}`);
-        setInfo(data); setState("ok");
+        setInfo(data);
+        // A gender-specific hostel (boys-only / girls-only) fixes every
+        // resident's gender, so we don't ask — just set it from the hostel.
+        if (data.gender === "MALE" || data.gender === "FEMALE") setForm((f) => ({ ...f, gender: data.gender }));
+        setState("ok");
       } catch { setState("invalid"); }
     })();
   }, [token]);
@@ -110,6 +114,9 @@ export default function IntakePage() {
   const isStudent = form.occupantType === "STUDENT";
   const isPro = form.occupantType === "PROFESSIONAL";
   const initial = (info?.hostelName || "H").trim().charAt(0).toUpperCase();
+  // Only ask for gender when the hostel accepts any gender. Boys-only/girls-only
+  // hostels already answer it.
+  const genderFixed = info?.gender === "MALE" || info?.gender === "FEMALE";
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 safe-top safe-bottom">
@@ -120,6 +127,11 @@ export default function IntakePage() {
           <h1 className="mt-3 text-xl font-bold tracking-tight">{info?.hostelName}</h1>
           {info?.city && <p className="text-sm text-white/70">{info.city}</p>}
           <p className="mt-2 text-sm text-white/85">Resident registration — tell us a little about you</p>
+          {genderFixed && (
+            <span className="mt-3 inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/25">
+              {info?.gender === "MALE" ? "🧑 Boys hostel" : "👩 Girls hostel"}
+            </span>
+          )}
         </div>
 
         <form onSubmit={submit} noValidate className="mt-5 space-y-4">
@@ -137,10 +149,12 @@ export default function IntakePage() {
                 <TextField label="Father / Guardian name" value={form.guardianName} onChange={(e) => set("guardianName", e.target.value)} />
                 <TextField label="CNIC number" value={form.cnic} onChange={(e) => set("cnic", e.target.value)} inputMode="numeric" placeholder="00000-0000000-0" />
                 <TextField label="Date of birth" type="date" value={form.dateOfBirth} onChange={(e) => set("dateOfBirth", e.target.value)} />
-                <SelectField label="Gender" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
-                  <option value="">Select…</option>
-                  <option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
-                </SelectField>
+                {!genderFixed && (
+                  <SelectField label="Gender" value={form.gender} onChange={(e) => set("gender", e.target.value)}>
+                    <option value="">Select…</option>
+                    <option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option>
+                  </SelectField>
+                )}
                 <TextField id="f-phone" label="Mobile number" required value={form.phone} error={errors.phone}
                   onChange={(e) => set("phone", e.target.value)} inputMode="tel" placeholder="03xx-xxxxxxx" autoComplete="tel" />
                 <TextField label="WhatsApp number" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} inputMode="tel" />
