@@ -113,7 +113,6 @@ export default function IntakePage() {
 
   const isStudent = form.occupantType === "STUDENT";
   const isPro = form.occupantType === "PROFESSIONAL";
-  const initial = (info?.hostelName || "H").trim().charAt(0).toUpperCase();
   // Only ask for gender when the hostel accepts any gender. Boys-only/girls-only
   // hostels already answer it.
   const genderFixed = info?.gender === "MALE" || info?.gender === "FEMALE";
@@ -123,7 +122,11 @@ export default function IntakePage() {
       <div className="mx-auto max-w-lg px-4 pb-32 pt-5">
         {/* Branded header */}
         <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-6 text-center text-white shadow-lg shadow-brand-900/10">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/15 text-2xl font-bold ring-1 ring-white/25 backdrop-blur">{initial}</div>
+          <img
+            src="/riwaq-logo.png"
+            alt={info?.companyName || "Hostel logo"}
+            className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-md ring-1 ring-white/25"
+          />
           <h1 className="mt-3 text-xl font-bold tracking-tight">{info?.hostelName}</h1>
           {info?.city && <p className="text-sm text-white/70">{info.city}</p>}
           <p className="mt-2 text-sm text-white/85">Resident registration — tell us a little about you</p>
