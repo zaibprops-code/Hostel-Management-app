@@ -125,7 +125,19 @@ api.interceptors.response.use(
 
 export function apiError(err: unknown): string {
   if (axios.isAxiosError(err)) {
-    return err.response?.data?.error ?? err.message;
+    const data = err.response?.data as { error?: string; details?: unknown } | undefined;
+    // When the server rejects a form, it returns per-field reasons under
+    // `details` (e.g. { email: ["Please enter a valid email address"] }).
+    // Surface those specific messages so the user knows exactly what to fix,
+    // instead of a vague "Validation failed".
+    const details = data?.details;
+    if (details && typeof details === "object") {
+      const messages = Object.values(details as Record<string, unknown>)
+        .flatMap((v) => (Array.isArray(v) ? v : [v]))
+        .filter((m): m is string => typeof m === "string" && m.length > 0);
+      if (messages.length) return messages.join(" ");
+    }
+    return data?.error ?? err.message;
   }
   return "Something went wrong";
 }

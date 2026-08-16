@@ -24,15 +24,25 @@ router.get(
   })
 );
 
+// Turn "" into undefined so optional text fields never fail validation just
+// because the box was left empty.
+const optionalText = z.preprocess((v) => (v === "" ? undefined : v), z.string().optional());
+
 const intakeSchema = z.object({
-  fullName: z.string().min(1),
-  guardianName: z.string().optional(),
-  dateOfBirth: z.coerce.date().optional(),
+  fullName: z.string().trim().min(1, "Please enter your full name."),
+  guardianName: optionalText,
+  dateOfBirth: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.date({ errorMap: () => ({ message: "Please enter a valid date of birth (or leave it blank)." }) }).optional()
+  ),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
-  cnic: z.string().optional(),
-  phone: z.string().optional(),
-  whatsapp: z.string().optional(),
-  email: z.string().email().optional().or(z.literal("")),
+  cnic: optionalText,
+  phone: optionalText,
+  whatsapp: optionalText,
+  email: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().email("Please enter a valid email address, or leave it blank.").optional()
+  ),
   permanentAddress: z.string().optional(),
   currentAddress: z.string().optional(),
   city: z.string().optional(),
