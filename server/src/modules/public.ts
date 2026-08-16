@@ -1,26 +1,43 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, notFound } from "../lib/http";
+import { ApiError, asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { upload, resolveType, storeFile } from "../lib/files";
 
-// Public, unauthenticated resident self-intake. A hostel owner shares the
-// /intake/:token link; a prospective resident fills the form and their details
-// land as a RESERVED, pendingReview resident for the owner to check and admit.
+// Public, unauthenticated resident self-intake. A hostel owner shares a
+// SINGLE-USE /intake/:token link; a prospective resident fills the form once and
+// their details land as a RESERVED, pendingReview resident. The link is consumed
+// on the first successful submission and cannot be reused.
 const router = Router();
 
-// GET /api/public/intake/:token — resolve a link to its hostel so the form can
-// greet the applicant with the right hostel name.
+// Load the invite for a token and make sure it can still be used. Throws a
+// clear, specific message for a missing / already-used / expired link.
+async function loadOpenInvite(token: string) {
+  const invite = await prisma.intakeInvite.findUnique({
+    where: { token },
+    include: { hostel: { select: { id: true, name: true, city: true, gender: true, companyId: true, company: { select: { name: true } } } } },
+  });
+  if (!invite) throw notFound("This registration link is invalid or has been turned off.");
+  if (invite.usedAt) throw new ApiError(410, "This registration link has already been used. Please ask the hostel for a new one.");
+  if (invite.expiresAt && invite.expiresAt.getTime() < Date.now()) {
+    throw new ApiError(410, "This registration link has expired. Please ask the hostel for a new one.");
+  }
+  return invite;
+}
+
+// GET /api/public/intake/:token — resolve a valid, unused link to its hostel so
+// the form can greet the applicant (and reject a used/expired link up front).
 router.get(
   "/intake/:token",
   asyncHandler(async (req, res) => {
-    const hostel = await prisma.hostel.findUnique({
-      where: { intakeToken: req.params.token },
-      select: { name: true, city: true, gender: true, company: { select: { name: true } } },
+    const invite = await loadOpenInvite(req.params.token);
+    res.json({
+      hostelName: invite.hostel.name,
+      city: invite.hostel.city,
+      gender: invite.hostel.gender,
+      companyName: invite.hostel.company.name,
     });
-    if (!hostel) throw notFound("This link is invalid or has been turned off.");
-    res.json({ hostelName: hostel.name, city: hostel.city, gender: hostel.gender, companyName: hostel.company.name });
   })
 );
 
@@ -96,8 +113,19 @@ router.post(
   intakeFiles,
   validateBody(intakeSchema),
   asyncHandler(async (req, res) => {
-    const hostel = await prisma.hostel.findUnique({ where: { intakeToken: req.params.token }, select: { id: true, companyId: true } });
-    if (!hostel) throw notFound("This link is invalid or has been turned off.");
+    const invite = await loadOpenInvite(req.params.token);
+    const hostel = invite.hostel;
+
+    // Consume the link atomically: the `usedAt: null` guard means only one
+    // submission can ever claim it, even under a double-submit race.
+    const claim = await prisma.intakeInvite.updateMany({
+      where: { id: invite.id, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    if (claim.count === 0) {
+      throw new ApiError(410, "This registration link has already been used. Please ask the hostel for a new one.");
+    }
+
     const files = req.files as Record<string, Express.Multer.File[]> | undefined;
 
     const data = { ...req.body } as Record<string, unknown>;
@@ -106,6 +134,8 @@ router.post(
     const resident = await prisma.resident.create({
       data: { ...data, hostelId: hostel.id, status: "RESERVED", pendingReview: true } as any,
     });
+    // Link the consumed invite to the resident it produced.
+    await prisma.intakeInvite.update({ where: { id: invite.id }, data: { residentId: resident.id } });
 
     // Profile photo (images only).
     const photo = files?.photo?.[0];

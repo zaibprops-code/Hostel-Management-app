@@ -24,7 +24,8 @@ export default function HostelsPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   // Registration-link + QR modal.
-  const [intake, setIntake] = useState<{ hostelName: string; link: string; svg: string } | null>(null);
+  const [intake, setIntake] = useState<{ hostelId: string; hostelName: string; link: string; svg: string } | null>(null);
+  const [intakeBusy, setIntakeBusy] = useState(false);
 
   const manage = can("hostels.manage");
 
@@ -56,14 +57,16 @@ export default function HostelsPage() {
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
 
-  // Generate (once) the public resident-registration link for a hostel and open
-  // the share modal (link + printable QR code).
-  async function openIntake(h: any) {
+  // Mint a fresh SINGLE-USE registration link for a hostel and open the share
+  // modal (link + printable QR). Each call creates a new unique link that works
+  // exactly once — generate one per prospective resident.
+  async function openIntake(h: { id: string; name: string }) {
+    setIntakeBusy(true);
     try {
       const { data } = await api.post(`/hostels/${h.id}/intake-link`, {});
       const link = `${window.location.origin}/intake/${data.token}`;
-      setIntake({ hostelName: h.name, link, svg: qrSvg(link) });
-    } catch (err) { toast.error(apiError(err)); }
+      setIntake({ hostelId: h.id, hostelName: h.name, link, svg: qrSvg(link) });
+    } catch (err) { toast.error(apiError(err)); } finally { setIntakeBusy(false); }
   }
   async function copyIntakeLink() {
     if (!intake) return;
@@ -195,19 +198,27 @@ export default function HostelsPage() {
         </div>
       </Modal>
 
-      <Modal open={!!intake} onClose={() => setIntake(null)} title="Resident registration link">
+      <Modal open={!!intake} onClose={() => setIntake(null)} title="One-time registration link">
         {intake && (
           <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              Share this with prospective residents of <b>{intake.hostelName}</b>. They fill in their own details (and can attach their CNIC/photo), and it lands in your app for you to review and admit.
-            </p>
+            <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-xs text-amber-800">
+              🔑 This is a <b>single-use</b> link for <b>one</b> resident of <b>{intake.hostelName}</b>. It stops working the moment they submit the form. Generate a new one for each new resident.
+            </div>
             <div className="mx-auto w-56 h-56 [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: intake.svg }} />
             <div className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 break-all text-center">{intake.link}</div>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={copyIntakeLink}>Copy link</Button>
               <Button className="flex-1" onClick={printIntake}>Print QR</Button>
             </div>
-            <p className="text-xs text-slate-400 text-center">Print the QR and stick it at your entrance, or send the link on WhatsApp.</p>
+            <button
+              type="button"
+              disabled={intakeBusy}
+              onClick={() => openIntake({ id: intake.hostelId, name: intake.hostelName })}
+              className="w-full text-center text-sm font-medium text-brand-600 hover:underline disabled:opacity-50"
+            >
+              {intakeBusy ? "Generating…" : "↻ Generate a new one-time link"}
+            </button>
+            <p className="text-xs text-slate-400 text-center">Send the link or QR to one person on WhatsApp. It expires after 30 days if unused.</p>
           </div>
         )}
       </Modal>

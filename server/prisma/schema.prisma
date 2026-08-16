@@ -355,8 +355,27 @@ model Hostel {
   menus         Menu[]
   investments   Investment[]
   loans         Loan[]
+  intakeInvites IntakeInvite[]
 
   @@index([companyId])
+}
+
+// A single-use, unique link a prospective resident fills in once. Consumed
+// (usedAt set) the moment a submission succeeds, so the same link can never be
+// reused. Optionally expires after a while even if never used.
+model IntakeInvite {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  hostelId    String
+  createdById String?
+  residentId  String?   // the resident created when the link was used
+  usedAt      DateTime? // null = still open; set = consumed
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  hostel Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+
+  @@index([hostelId])
 }
 
 model Floor {

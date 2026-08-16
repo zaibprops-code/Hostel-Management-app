@@ -119,24 +119,25 @@ router.put(
   })
 );
 
-// POST /api/hostels/:id/intake-link — create (or rotate) the public
-// self-intake token for this hostel and return it. Sharing the resulting
-// /intake/:token link lets prospective residents submit their own details.
+// POST /api/hostels/:id/intake-link — mint a fresh SINGLE-USE registration
+// link. Every call returns a brand-new unique token; the resulting /intake/:token
+// link works exactly once (it's consumed on the first successful submission) and
+// otherwise expires after 30 days. Share one link per prospective resident.
 router.post(
   "/:id/intake-link",
   requirePermission("hostels.manage"),
-  validateBody(z.object({ rotate: z.boolean().optional() }).optional()),
   asyncHandler(async (req, res) => {
     await assertHostelAccess(req, req.params.id);
     const hostel = await prisma.hostel.findUnique({ where: { id: req.params.id } });
     if (!hostel) throw notFound("Hostel not found");
-    let token = hostel.intakeToken;
-    if (!token || req.body?.rotate) {
-      token = crypto.randomBytes(16).toString("hex");
-      await prisma.hostel.update({ where: { id: hostel.id }, data: { intakeToken: token } });
-      await audit({ userId: req.auth!.id, action: "hostel.intake_link", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id });
-    }
-    res.json({ token });
+
+    const token = crypto.randomBytes(24).toString("hex"); // unique + unguessable
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await prisma.intakeInvite.create({
+      data: { token, hostelId: hostel.id, createdById: req.auth!.id, expiresAt },
+    });
+    await audit({ userId: req.auth!.id, action: "hostel.intake_link", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id });
+    res.json({ token, expiresAt });
   })
 );
 

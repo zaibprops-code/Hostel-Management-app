@@ -45,6 +45,7 @@ export default function IntakePage() {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [muted, setMutedState] = useState(isMuted());
+  const [invalidMsg, setInvalidMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -53,7 +54,10 @@ export default function IntakePage() {
         setInfo(data);
         if (data.gender === "MALE" || data.gender === "FEMALE") setForm((f) => ({ ...f, gender: data.gender }));
         setState("ok");
-      } catch { setState("invalid"); }
+      } catch (e) {
+        setInvalidMsg(apiError(e));
+        setState("invalid");
+      }
     })();
   }, [token]);
 
@@ -125,7 +129,7 @@ export default function IntakePage() {
       <BrandScreen>
         <div className="mb-3 text-5xl">🔗</div>
         <h1 className="text-lg font-bold text-slate-900">This link isn't working</h1>
-        <p className="mt-2 text-sm text-slate-500">The registration link is invalid or has been turned off. Please ask the hostel for a fresh link.</p>
+        <p className="mt-2 text-sm text-slate-500">{invalidMsg || "The registration link is invalid or has been turned off. Please ask the hostel for a fresh link."}</p>
       </BrandScreen>
     );
   }
