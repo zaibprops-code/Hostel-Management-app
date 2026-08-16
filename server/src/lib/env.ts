@@ -10,6 +10,19 @@ function required(key: string, fallback?: string): string {
   return value;
 }
 
+// Accept the R2 Account ID however it was pasted and return just the bare id:
+//   "abc123"                                        → "abc123"
+//   "abc123.r2.cloudflarestorage.com"               → "abc123"
+//   "https://abc123.r2.cloudflarestorage.com/"      → "abc123"
+// This avoids a TLS "handshake failure" caused by a stray newline or a full
+// endpoint URL ending up in the S3 client's hostname.
+function normalizeR2Account(raw: string): string {
+  const s = raw.trim();
+  const m = s.match(/^(?:https?:\/\/)?([^./\s]+)\.r2\.cloudflarestorage\.com/i);
+  if (m) return m[1];
+  return s.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
@@ -47,10 +60,15 @@ export const env = {
   // NOTE: this is file storage only — the Postgres database (DATABASE_URL /
   // DIRECT_URL, on Supabase) is entirely separate and unaffected.
   r2: {
-    accountId: process.env.R2_ACCOUNT_ID ?? "",
-    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
-    bucket: process.env.R2_BUCKET ?? "",
+    // The Cloudflare Account ID (a 32-char hex string). Be forgiving about how
+    // it's pasted: strip surrounding whitespace/newlines, a leading "https://",
+    // and — if the whole S3 endpoint was pasted — extract just the account id
+    // subdomain. A malformed value here points the S3 client at a non-existent
+    // host and fails with a TLS "handshake failure" (SSL alert 40).
+    accountId: normalizeR2Account(process.env.R2_ACCOUNT_ID ?? ""),
+    accessKeyId: (process.env.R2_ACCESS_KEY_ID ?? "").trim(),
+    secretAccessKey: (process.env.R2_SECRET_ACCESS_KEY ?? "").trim(),
+    bucket: (process.env.R2_BUCKET ?? "").trim(),
     // How long a presigned upload/download URL stays valid (seconds).
     urlTtl: Number(process.env.R2_URL_TTL ?? 300),
   },
