@@ -344,7 +344,10 @@ function Section({ icon, title, subtitle, children, style }: { icon: string; tit
 function useObjectUrl(file: File | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (!file || !file.type.startsWith("image/")) { setUrl(null); return; }
+    if (!file) { setUrl(null); return; }
+    // Preview ANY picked file — don't gate on file.type. Phone camera captures
+    // and some file pickers report an empty/missing MIME type, which was making
+    // the photo preview blank. The <img onError> fallback covers real non-images.
     const u = URL.createObjectURL(file);
     setUrl(u);
     return () => URL.revokeObjectURL(u);
@@ -419,7 +422,7 @@ function DocPicker({ label, file, onPick }: { label: string; file: File | null; 
   const [broken, setBroken] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => setBroken(false), [file]);
-  const isPdf = file && !file.type.startsWith("image/");
+  const isPdf = !!file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name));
   return (
     <div>
       <span className={LABEL}>{label}</span>
