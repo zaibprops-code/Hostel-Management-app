@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import clsx from "clsx";
 import { api, apiError } from "../lib/api";
-import { compressPhoto, compressDocument } from "../lib/image";
+import { compressPhoto, compressDocument, normalizeImage } from "../lib/image";
 import { Spinner } from "../components/ui";
 import { sound, isMuted, setMuted } from "../lib/sound";
 
@@ -46,6 +46,7 @@ export default function IntakePage() {
   const [done, setDone] = useState(false);
   const [muted, setMutedState] = useState(isMuted());
   const [invalidMsg, setInvalidMsg] = useState("");
+  const [converting, setConverting] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     (async () => {
@@ -65,9 +66,18 @@ export default function IntakePage() {
     setForm((f) => ({ ...f, [k]: v }));
     setErrors((e) => (e[k] ? { ...e, [k]: "" } : e));
   }
-  function pickFile(key: keyof Files, f: File | null) {
-    setFiles((s) => ({ ...s, [key]: f }));
-    if (f) sound.pick();
+  async function pickFile(key: keyof Files, f: File | null) {
+    if (!f) { setFiles((s) => ({ ...s, [key]: null })); return; }
+    sound.pick();
+    // Convert HEIC (iPhone) → JPEG up front so it previews, uploads and later
+    // displays as a normal image. Instant/no-op for JPEG/PNG.
+    setConverting((c) => ({ ...c, [key]: true }));
+    try {
+      const ready = await normalizeImage(f);
+      setFiles((s) => ({ ...s, [key]: ready }));
+    } finally {
+      setConverting((c) => ({ ...c, [key]: false }));
+    }
   }
   function toggleMute() {
     const next = !muted;
@@ -212,7 +222,7 @@ export default function IntakePage() {
 
         <form onSubmit={submit} noValidate className="mt-5 space-y-4">
           <Section icon="📸" title="Your photo" subtitle="A clear face photo helps the hostel recognise you at check-in." style={delay()}>
-            <PhotoAvatar file={files.photo} onPick={(f) => pickFile("photo", f)} />
+            <PhotoAvatar file={files.photo} converting={!!converting.photo} onPick={(f) => pickFile("photo", f)} />
           </Section>
 
           <Section icon="🧑" title="Personal details" style={delay()}>
@@ -291,9 +301,9 @@ export default function IntakePage() {
 
           <Section icon="🪪" title="ID documents" subtitle="Optional but recommended — a photo of your CNIC speeds up check-in." style={delay()}>
             <div className="space-y-3">
-              <DocPicker label="CNIC — front" file={files.cnicFront} onPick={(f) => pickFile("cnicFront", f)} />
-              <DocPicker label="CNIC — back" file={files.cnicBack} onPick={(f) => pickFile("cnicBack", f)} />
-              {isStudent && <DocPicker label="Student / University card" file={files.studentCard} onPick={(f) => pickFile("studentCard", f)} />}
+              <DocPicker label="CNIC — front" file={files.cnicFront} converting={!!converting.cnicFront} onPick={(f) => pickFile("cnicFront", f)} />
+              <DocPicker label="CNIC — back" file={files.cnicBack} converting={!!converting.cnicBack} onPick={(f) => pickFile("cnicBack", f)} />
+              {isStudent && <DocPicker label="Student / University card" file={files.studentCard} converting={!!converting.studentCard} onPick={(f) => pickFile("studentCard", f)} />}
             </div>
           </Section>
 
@@ -446,14 +456,16 @@ function TextArea({ label, className, ...rest }: React.TextareaHTMLAttributes<HT
 }
 
 // Circular profile-photo picker with live preview + camera support.
-function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
+function PhotoAvatar({ file, converting, onPick }: { file: File | null; converting?: boolean; onPick: (f: File | null) => void }) {
   const { url, loading } = useImagePreview(file);
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col items-center gap-2">
       <button type="button" onClick={() => ref.current?.click()}
         className="group relative h-28 w-28 overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-[#c9a45c] focus:outline-none focus:ring-2 focus:ring-[#c9a45c]/40">
-        {url ? (
+        {converting ? (
+          <span className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400"><Spinner className="h-6 w-6 text-[#14442f]" /><span className="text-[11px] font-semibold">Preparing…</span></span>
+        ) : url ? (
           <img src={url} alt="Your photo" className="h-full w-full object-cover" />
         ) : loading ? (
           <span className="flex h-full w-full items-center justify-center"><Spinner className="h-6 w-6 text-[#14442f]" /></span>
@@ -478,14 +490,16 @@ function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | n
 }
 
 // Document picker with an image thumbnail (or PDF chip) preview.
-function DocPicker({ label, file, onPick }: { label: string; file: File | null; onPick: (f: File | null) => void }) {
+function DocPicker({ label, file, converting, onPick }: { label: string; file: File | null; converting?: boolean; onPick: (f: File | null) => void }) {
   const { url } = useImagePreview(file);
   const ref = useRef<HTMLInputElement>(null);
   const isPdf = !!file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name));
   return (
     <div>
       <span className={LABEL}>{label}</span>
-      {file ? (
+      {converting ? (
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-500"><Spinner className="h-5 w-5 text-[#14442f]" /> Preparing…</div>
+      ) : file ? (
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2">
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100">
             {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">{isPdf ? "📄" : "🖼️"}</span>}

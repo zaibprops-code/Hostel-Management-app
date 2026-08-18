@@ -1,11 +1,32 @@
 // Shrink an image in the browser before uploading. Profile photos are squeezed
 // harder (they only ever show small); documents like CNIC keep more resolution
 // and quality so the text stays crisp. Non-images (PDFs) are left untouched.
+// iPhones save photos as HEIC, which Chrome/most browsers can't decode (so they
+// won't preview, compress, or display). Detect and convert those to JPEG.
+export function isHeic(file: File): boolean {
+  return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+}
+
+// Convert a HEIC/HEIF file to a JPEG File (leaving anything else untouched). The
+// heic2any decoder is heavy (WASM), so it's only loaded when actually needed.
+export async function normalizeImage(file: File): Promise<File> {
+  if (!isHeic(file)) return file;
+  try {
+    const heic2any = (await import("heic2any")).default;
+    const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const blob = Array.isArray(out) ? out[0] : out;
+    return new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+  } catch {
+    return file; // conversion failed — fall back to the original
+  }
+}
+
 async function compress(file: File, maxDim: number, quality: number): Promise<File> {
   // Skip PDFs; try to compress everything else. Don't gate on file.type —
   // phone/desktop captures often report a blank MIME type; the canvas below
   // decodes by content and simply falls back to the original if it can't.
   if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return file;
+  file = await normalizeImage(file); // HEIC → JPEG so the canvas can decode it
   try {
     const url = URL.createObjectURL(file);
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
