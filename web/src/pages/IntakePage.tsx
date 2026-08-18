@@ -378,18 +378,42 @@ function Section({ icon, title, subtitle, children, style }: { icon: string; tit
   );
 }
 
-function useObjectUrl(file: File | null): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+// Build a small, always-renderable JPEG thumbnail for a picked image by drawing
+// it through a canvas. Crucially this decodes by CONTENT, not by the file's
+// reported MIME type — phone and desktop pickers often leave the type blank,
+// which made a raw <img src=blob> silently fail and show nothing. Returns null
+// for non-images / undecodable files so the caller can show a fallback.
+function useImagePreview(file: File | null): { url: string | null; loading: boolean } {
+  const [state, setState] = useState<{ url: string | null; loading: boolean }>({ url: null, loading: false });
   useEffect(() => {
-    if (!file) { setUrl(null); return; }
-    // Preview ANY picked file — don't gate on file.type. Phone camera captures
-    // and some file pickers report an empty/missing MIME type, which was making
-    // the photo preview blank. The <img onError> fallback covers real non-images.
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
+    if (!file) { setState({ url: null, loading: false }); return; }
+    let cancelled = false;
+    setState({ url: null, loading: true });
+    const obj = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(obj);
+      if (cancelled) return;
+      try {
+        const max = 400;
+        const scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+        const w = Math.max(1, Math.round((img.width || max) * scale));
+        const h = Math.max(1, Math.round((img.height || max) * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return setState({ url: null, loading: false });
+        ctx.drawImage(img, 0, 0, w, h);
+        setState({ url: canvas.toDataURL("image/jpeg", 0.85), loading: false });
+      } catch {
+        setState({ url: null, loading: false });
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(obj); if (!cancelled) setState({ url: null, loading: false }); };
+    img.src = obj;
+    return () => { cancelled = true; };
   }, [file]);
-  return url;
+  return state;
 }
 
 type FieldProps = React.InputHTMLAttributes<HTMLInputElement> & { label: string; required?: boolean; error?: string };
@@ -423,16 +447,16 @@ function TextArea({ label, className, ...rest }: React.TextareaHTMLAttributes<HT
 
 // Circular profile-photo picker with live preview + camera support.
 function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
-  const url = useObjectUrl(file);
-  const [broken, setBroken] = useState(false);
+  const { url, loading } = useImagePreview(file);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => setBroken(false), [file]);
   return (
     <div className="flex flex-col items-center gap-2">
       <button type="button" onClick={() => ref.current?.click()}
         className="group relative h-28 w-28 overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-50 transition hover:border-[#c9a45c] focus:outline-none focus:ring-2 focus:ring-[#c9a45c]/40">
-        {url && !broken ? (
-          <img src={url} alt="Your photo" className="h-full w-full object-cover" onError={() => setBroken(true)} />
+        {url ? (
+          <img src={url} alt="Your photo" className="h-full w-full object-cover" />
+        ) : loading ? (
+          <span className="flex h-full w-full items-center justify-center"><Spinner className="h-6 w-6 text-[#14442f]" /></span>
         ) : file ? (
           <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-emerald-50 text-emerald-600">
             <span className="text-2xl">✓</span><span className="text-[11px] font-semibold">Photo added</span>
@@ -455,10 +479,8 @@ function PhotoAvatar({ file, onPick }: { file: File | null; onPick: (f: File | n
 
 // Document picker with an image thumbnail (or PDF chip) preview.
 function DocPicker({ label, file, onPick }: { label: string; file: File | null; onPick: (f: File | null) => void }) {
-  const url = useObjectUrl(file);
-  const [broken, setBroken] = useState(false);
+  const { url } = useImagePreview(file);
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => setBroken(false), [file]);
   const isPdf = !!file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name));
   return (
     <div>
@@ -466,7 +488,7 @@ function DocPicker({ label, file, onPick }: { label: string; file: File | null; 
       {file ? (
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2">
           <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-100">
-            {url && !broken ? <img src={url} alt="" className="h-full w-full object-cover" onError={() => setBroken(true)} /> : <span className="text-xl">📄</span>}
+            {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <span className="text-xl">{isPdf ? "📄" : "🖼️"}</span>}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-700">{file.name}</p>

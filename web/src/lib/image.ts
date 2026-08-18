@@ -2,7 +2,10 @@
 // harder (they only ever show small); documents like CNIC keep more resolution
 // and quality so the text stays crisp. Non-images (PDFs) are left untouched.
 async function compress(file: File, maxDim: number, quality: number): Promise<File> {
-  if (!file.type.startsWith("image/")) return file;
+  // Skip PDFs; try to compress everything else. Don't gate on file.type —
+  // phone/desktop captures often report a blank MIME type; the canvas below
+  // decodes by content and simply falls back to the original if it can't.
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return file;
   try {
     const url = URL.createObjectURL(file);
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
