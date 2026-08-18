@@ -20,6 +20,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Elegant serif for display headings (echoes the Riwaq wordmark). */
+.font-display {
+  font-family: "Fraunces", "Georgia", "Times New Roman", serif;
+  font-optical-sizing: auto;
+}
+
 @keyframes slideup {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
