@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import {
   IconDashboard, IconHostel, IconBed, IconResidents, IconAdmission, IconMoney, IconExpense, IconIncome,
-  IconChart, IconFood, IconInventory, IconSupplier, IconStaff, IconMaintenance, IconComplaint, IconVisitor,
+  IconChart, IconFood, IconInventory, IconBox, IconSupplier, IconStaff, IconMaintenance, IconComplaint, IconVisitor,
   IconNotice, IconReport, IconUsers, IconAudit, IconSettings, IconLogout, IconMenu, IconBell,
 } from "./icons";
 
@@ -27,6 +27,7 @@ const NAV: NavItem[] = [
 
   { to: "/hostels", label: "Hostels", icon: IconHostel, perm: "hostels.view", group: "Property" },
   { to: "/rooms", label: "Rooms & Beds", icon: IconBed, perm: "rooms.view", group: "Property" },
+  { to: "/assets", label: "Assets", icon: IconBox, perm: "assets.view", group: "Property" },
 
   // The people hub: lists all residents/guests and holds "New Admission".
   { to: "/admissions", label: "Residents", icon: IconResidents, perm: "admissions.manage", group: "People" },

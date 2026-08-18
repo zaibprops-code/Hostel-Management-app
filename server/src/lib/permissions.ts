@@ -26,6 +26,8 @@ export const PERMISSIONS = [
   "food.manage",
   "inventory.view",
   "inventory.manage",
+  "assets.view",
+  "assets.manage",
   "suppliers.view",
   "suppliers.manage",
   "staff.view",
@@ -74,6 +76,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "food.manage",
     "inventory.view",
     "inventory.manage",
+    "assets.view",
+    "assets.manage",
     "suppliers.view",
     "suppliers.manage",
     "staff.view",
@@ -110,6 +114,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "food.manage",
     "inventory.view",
     "inventory.manage",
+    "assets.view",
+    "assets.manage", // kitchen keeps its own utensils/appliances register
     "suppliers.view",
     "suppliers.manage",
     "expenses.view",
@@ -117,6 +123,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   STAFF: [
     "dashboard.view",
+    "assets.view", // on-site staff can see the branch asset register
     "maintenance.view",
     "maintenance.manage", // on-site staff log/handle maintenance issues
     "complaints.view",

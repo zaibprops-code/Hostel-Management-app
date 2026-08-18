@@ -19,6 +19,7 @@ import IncomePage from "./pages/IncomePage";
 import CapitalPage from "./pages/CapitalPage";
 import FoodPage from "./pages/FoodPage";
 import InventoryPage from "./pages/InventoryPage";
+import AssetsPage from "./pages/AssetsPage";
 import StaffPage from "./pages/StaffPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import ComplaintsPage from "./pages/ComplaintsPage";
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/" element={<RoleHome loading={loading} isResident={user?.role === "RESIDENT"} />} />
         <Route path="/hostels" element={<Protected perm="hostels.view"><HostelsPage /></Protected>} />
         <Route path="/rooms" element={<Protected perm="rooms.view"><RoomsPage /></Protected>} />
+        <Route path="/assets" element={<Protected perm="assets.view"><AssetsPage /></Protected>} />
         {/* The standalone Residents list was merged into Admissions; /residents
             redirects there, while the per-resident detail page stays. */}
         <Route path="/residents" element={<Navigate to="/admissions" replace />} />

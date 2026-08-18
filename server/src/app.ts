@@ -24,6 +24,7 @@ import reportsRouter from "./modules/reports";
 import { maintenanceRouter, complaintsRouter, visitorsRouter, noticesRouter } from "./modules/operations";
 import foodRouter from "./modules/food";
 import { inventoryRouter, suppliersRouter } from "./modules/inventory";
+import { assetsRouter } from "./modules/assets";
 import staffRouter from "./modules/staff";
 import usersRouter from "./modules/users";
 import { auditRouter, notificationsRouter } from "./modules/misc";
@@ -101,6 +102,7 @@ export function createApp() {
   app.use("/api/notices", noticesRouter);
   app.use("/api/food", foodRouter);
   app.use("/api/inventory", inventoryRouter);
+  app.use("/api/assets", assetsRouter);
   app.use("/api/suppliers", suppliersRouter);
   app.use("/api/staff", staffRouter);
   app.use("/api/users", usersRouter);

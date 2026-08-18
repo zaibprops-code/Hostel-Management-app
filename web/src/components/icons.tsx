@@ -12,6 +12,7 @@ const s = (path: string) => ({ className }: P) =>
 export const IconDashboard = s("M3 13h8V3H3v10Z|M13 21h8V11h-8v10Z|M13 3v6h8V3h-8Z|M3 21h8v-4H3v4Z");
 export const IconHostel = s("M3 21h18|M5 21V7l7-4 7 4v14|M9 21v-6h6v6|M9 10h.01|M15 10h.01");
 export const IconBed = s("M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8|M2 14h20|M6 10V7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3");
+export const IconBox = s("M21 8l-9-5-9 5v8l9 5 9-5V8Z|M3 8l9 5 9-5|M12 13v8|M7.5 5.5l9 5");
 export const IconResidents = s("M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2|M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z|M23 21v-2a4 4 0 0 0-3-3.87|M16 3.13a4 4 0 0 1 0 7.75");
 export const IconAdmission = s("M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2|M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z|M19 8v6|M22 11h-6");
 export const IconMoney = s("M12 1v22|M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6");

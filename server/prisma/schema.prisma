@@ -346,6 +346,7 @@ model Hostel {
   incomes       Income[]
   staff         Staff[]
   inventory     InventoryItem[]
+  assets        Asset[]
   suppliers     Supplier[]
   purchases     Purchase[]
   tickets       MaintenanceTicket[]
@@ -930,6 +931,31 @@ model InventoryItem {
   transactions InventoryTransaction[]
 
   @@index([hostelId])
+}
+
+// Durable physical assets a hostel owns (furniture, appliances, kitchen items,
+// bedding, electronics…). Unlike InventoryItem (consumable stock that is bought
+// and used up), an Asset is a counted, long-lived possession — a register of
+// "what we have and its condition" per hostel branch, for audits and handovers.
+model Asset {
+  id           String    @id @default(cuid())
+  hostelId     String
+  name         String    // e.g. "Refrigerator", "Steel bunk bed", "Dinner plate"
+  category     String    // Furniture, Appliances, Kitchen, Bedding, Electronics, …
+  quantity     Int       @default(1)
+  condition    String    @default("GOOD") // NEW | GOOD | FAIR | DAMAGED
+  location     String?   // where it lives, e.g. "Room 101", "Kitchen", "Common room"
+  // Per-unit cost, so the register can show a replacement/asset value.
+  unitCost     Decimal   @default(0) @db.Decimal(12, 2)
+  purchaseDate DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  hostel Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+
+  @@index([hostelId])
+  @@index([category])
 }
 
 model InventoryTransaction {
