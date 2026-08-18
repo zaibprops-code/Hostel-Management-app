@@ -156,10 +156,46 @@ export default function IntakePage() {
   const delay = () => ({ animationDelay: `${step++ * 70}ms` });
 
   return (
-    <div className="min-h-screen bg-[#f4f2ea] safe-top safe-bottom">
-      <div className="mx-auto max-w-lg px-4 pb-36 pt-5">
-        {/* ---- Branded header ---- */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1b5138] via-[#14442f] to-[#0d3323] p-7 text-center text-white shadow-xl shadow-[#0d3323]/20 animate-[intakeIn_0.5s_ease-out_both]">
+    <div className="min-h-screen bg-[#f4f2ea] safe-top safe-bottom lg:flex">
+      {/* ---- Desktop brand panel (mobile uses the header card below) ---- */}
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#1b5138] via-[#14442f] to-[#0d3323] p-10 text-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[42%] lg:max-w-[560px] lg:shrink-0 lg:flex-col lg:justify-between lg:self-start">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#c9a45c]/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-12 h-64 w-64 rounded-full bg-[#c9a45c]/[0.07] blur-3xl" />
+        <MuteButton muted={muted} onToggle={toggleMute} />
+        <div className="relative">
+          <img src="/riwaq-logo.png" alt={info?.companyName || "Logo"} className="h-28 w-28 rounded-2xl object-cover shadow-lg ring-1 ring-white/20" />
+          <h1 className="mt-6 text-3xl font-bold tracking-tight">{info?.hostelName}</h1>
+          {info?.city && <p className="mt-1 text-[#e8dcc0]/80">{info.city}</p>}
+          <div className="my-5 h-px w-16 bg-[#c9a45c]/50" />
+          <p className="max-w-sm text-lg leading-relaxed text-white/85">Welcome! Share a few details and we'll get your room ready — it only takes a couple of minutes.</p>
+          {genderFixed && (
+            <span className="mt-5 inline-block rounded-full bg-[#c9a45c]/20 px-3 py-1 text-xs font-semibold text-[#e8dcc0] ring-1 ring-[#c9a45c]/40">
+              {info?.gender === "MALE" ? "Boys hostel" : "Girls hostel"}
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#c9a45c]">Have these ready</p>
+          <ul className="space-y-2.5 text-sm text-white/85">
+            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">🪪</span> Your CNIC number (and a photo of it)</li>
+            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">📸</span> A clear face photo</li>
+            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">☎️</span> An emergency contact number</li>
+          </ul>
+          <p className="mt-6 text-xs text-white/50">🔒 Your information is sent only to {info?.companyName}.</p>
+        </div>
+      </aside>
+
+      {/* ---- Form column ---- */}
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto w-full max-w-xl px-4 pb-36 pt-5 lg:px-10 lg:pb-16 lg:pt-12">
+          {/* Desktop intro heading */}
+          <div className="mb-6 hidden lg:block">
+            <h2 className="text-2xl font-bold text-[#14442f]">Resident registration</h2>
+            <p className="mt-1 text-slate-500">Fill in your details below — fields marked <span className="text-rose-500">*</span> are required.</p>
+          </div>
+
+          {/* ---- Mobile branded header (desktop uses the panel on the left) ---- */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1b5138] via-[#14442f] to-[#0d3323] p-7 text-center text-white shadow-xl shadow-[#0d3323]/20 animate-[intakeIn_0.5s_ease-out_both] lg:hidden">
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#c9a45c]/10 blur-2xl" />
           <MuteButton muted={muted} onToggle={toggleMute} />
           <img src="/riwaq-logo.png" alt={info?.companyName || "Logo"} className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-lg ring-1 ring-white/20" />
@@ -284,11 +320,10 @@ export default function IntakePage() {
 
           {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 animate-[intakeIn_0.3s_ease-out_both]">{error}</p>}
         </form>
-      </div>
 
-      {/* ---- Sticky submit bar with progress ---- */}
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-black/5 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] backdrop-blur">
-        <div className="mx-auto max-w-lg">
+        {/* Submit + progress — a fixed bottom bar on mobile, in-flow on desktop. */}
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-black/5 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] backdrop-blur lg:static lg:mt-8 lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+          <div className="mx-auto max-w-lg lg:max-w-none">
           <div className="mb-2 flex items-center gap-3">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-gradient-to-r from-[#c9a45c] to-[#14442f] transition-all duration-500" style={{ width: `${Math.max(6, progress)}%` }} />
@@ -300,9 +335,11 @@ export default function IntakePage() {
             {saving && <Spinner className="h-5 w-5 text-white" />}
             {saving ? "Submitting…" : "Submit my details"}
           </button>
-          <p className="mt-2 text-center text-[11px] text-slate-400">🔒 Your information is sent only to {info?.companyName}.</p>
+          <p className="mt-2 text-center text-[11px] text-slate-400 lg:hidden">🔒 Your information is sent only to {info?.companyName}.</p>
+          </div>
         </div>
       </div>
+    </main>
     </div>
   );
 }
