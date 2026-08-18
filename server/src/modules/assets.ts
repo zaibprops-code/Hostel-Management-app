@@ -15,6 +15,8 @@ import { audit } from "../lib/audit";
 export const assetsRouter = Router();
 
 const CONDITIONS = ["NEW", "GOOD", "FAIR", "DAMAGED"] as const;
+const RECOVERY = ["PENDING", "RECOVERED", "ADJUSTED", "WAIVED"] as const;
+const optDate = (v: unknown) => (v === "" ? undefined : v);
 
 const assetSchema = z.object({
   hostelId: z.string().min(1),
@@ -24,19 +26,22 @@ const assetSchema = z.object({
   condition: z.enum(CONDITIONS).default("GOOD"),
   location: z.string().trim().optional(),
   unitCost: z.coerce.number().min(0).default(0),
-  purchaseDate: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
+  purchaseDate: z.preprocess(optDate, z.coerce.date().optional()),
+  vendor: z.string().trim().optional(),
+  warrantyUntil: z.preprocess(optDate, z.coerce.date().optional()),
+  // Cost-recovery from the property owner (rented buildings).
+  recoverable: z.coerce.boolean().default(false),
+  recoveryStatus: z.enum(RECOVERY).default("PENDING"),
+  recoveredAmount: z.coerce.number().min(0).default(0),
+  recoveredDate: z.preprocess(optDate, z.coerce.date().optional()),
   notes: z.string().trim().optional(),
 });
 
 // Updates may change any field except which hostel the asset belongs to.
 const assetUpdateSchema = assetSchema.partial().omit({ hostelId: true });
 
-function serialize(a: {
-  id: string; hostelId: string; name: string; category: string; quantity: number;
-  condition: string; location: string | null; unitCost: unknown; purchaseDate: Date | null;
-  notes: string | null; hostel?: { name: string };
-}) {
-  const unitCost = dec(a.unitCost as never);
+function serialize(a: any) {
+  const unitCost = dec(a.unitCost);
   return {
     id: a.id,
     hostelId: a.hostelId,
@@ -48,6 +53,12 @@ function serialize(a: {
     unitCost,
     totalValue: unitCost * a.quantity,
     purchaseDate: a.purchaseDate,
+    vendor: a.vendor,
+    warrantyUntil: a.warrantyUntil,
+    recoverable: a.recoverable,
+    recoveryStatus: a.recoveryStatus,
+    recoveredAmount: dec(a.recoveredAmount),
+    recoveredDate: a.recoveredDate,
     notes: a.notes,
     hostel: a.hostel?.name,
   };
@@ -72,11 +83,16 @@ assetsRouter.get(
     });
     const data = assets.map(serialize);
 
+    // Money the property owner still owes us: value of recoverable items not yet
+    // recovered/adjusted/waived.
+    const pendingRecoverable = data.filter((a) => a.recoverable && a.recoveryStatus === "PENDING");
     const summary = {
       distinctItems: data.length,
       totalUnits: data.reduce((s, a) => s + a.quantity, 0),
       totalValue: data.reduce((s, a) => s + a.totalValue, 0),
       damagedUnits: data.filter((a) => a.condition === "DAMAGED").reduce((s, a) => s + a.quantity, 0),
+      ownerOwesPending: pendingRecoverable.reduce((s, a) => s + a.totalValue, 0),
+      ownerOwesCount: pendingRecoverable.length,
       categories: Array.from(new Set(data.map((a) => a.category))).sort(),
     };
     res.json({ data, summary });

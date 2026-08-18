@@ -948,6 +948,15 @@ model Asset {
   // Per-unit cost, so the register can show a replacement/asset value.
   unitCost     Decimal   @default(0) @db.Decimal(12, 2)
   purchaseDate DateTime?
+  vendor       String?   // supplier / who supplied or fitted it
+  warrantyUntil DateTime?
+  // Buildings are rented, so improvements fitted into the landlord's property
+  // (a shower, geyser, wiring…) are often recoverable from the property owner.
+  // When `recoverable` is true, the item's value is money the owner may owe us.
+  recoverable    Boolean  @default(false)
+  recoveryStatus String   @default("PENDING") // PENDING | RECOVERED | ADJUSTED | WAIVED
+  recoveredAmount Decimal @default(0) @db.Decimal(12, 2)
+  recoveredDate  DateTime?
   notes        String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
