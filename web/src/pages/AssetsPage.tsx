@@ -52,7 +52,7 @@ export default function AssetsPage() {
   const confirm = useConfirm();
   const { can } = useAuth();
   const { hostels, scopeParam } = useHostels();
-  const { data, loading, refetch } = useApi<{ data: Asset[]; summary: Summary }>(withQuery("/assets", scopeParam), [scopeParam]);
+  const { data, loading, refetch, setData } = useApi<{ data: Asset[]; summary: Summary }>(withQuery("/assets", scopeParam), [scopeParam]);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>(BLANK);
@@ -60,7 +60,6 @@ export default function AssetsPage() {
   const [cat, setCat] = useState("ALL");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [qtyBusy, setQtyBusy] = useState<string | null>(null);
 
   const assets = data?.data ?? [];
   const summary = data?.summary;
@@ -89,23 +88,40 @@ export default function AssetsPage() {
     setSaving(true); setError("");
     try {
       const payload = { ...form, hostelId: form.hostelId || hostels[0]?.id };
-      if (editingId) await api.patch(`/assets/${editingId}`, payload);
-      else await api.post("/assets", payload);
-      setOpen(false); setEditingId(null); await refetch();
+      if (editingId) {
+        const { data: updated } = await api.patch<Asset>(`/assets/${editingId}`, payload);
+        setData((prev) => (prev ? { ...prev, data: prev.data.map((x) => (x.id === editingId ? updated : x)) } : prev));
+      } else {
+        const { data: created } = await api.post<Asset>("/assets", payload);
+        setData((prev) => (prev ? { ...prev, data: [created, ...prev.data] } : prev));
+      }
+      setOpen(false); setEditingId(null);
       toast.success(editingId ? "Item updated." : "Item added to the register.");
+      refetch(); // reconcile summary + ordering quietly in the background
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
+  // Optimistic: update the list + totals instantly, then sync to the server.
   async function bumpQty(a: Asset, delta: number) {
     const next = Math.max(0, a.quantity + delta);
     if (next === a.quantity) return;
-    setQtyBusy(a.id);
-    try { await api.patch(`/assets/${a.id}`, { quantity: next }); await refetch(); }
-    catch (e) { toast.error(apiError(e)); } finally { setQtyBusy(null); }
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        data: prev.data.map((x) => (x.id === a.id ? { ...x, quantity: next, totalValue: x.unitCost * next } : x)),
+        summary: { ...prev.summary, totalUnits: prev.summary.totalUnits + (next - a.quantity), totalValue: prev.summary.totalValue + a.unitCost * (next - a.quantity) },
+      };
+    });
+    try { await api.patch(`/assets/${a.id}`, { quantity: next }); }
+    catch (e) { toast.error(apiError(e)); refetch(); } // rollback to server truth
   }
   async function remove(a: Asset) {
     if (!(await confirm({ title: "Delete item?", message: `Remove "${a.name}" from the asset register? This can't be undone.`, confirmLabel: "Delete", danger: true }))) return;
-    try { await api.delete(`/assets/${a.id}`); toast.success("Item removed."); await refetch(); }
-    catch (e) { toast.error(apiError(e)); }
+    setData((prev) => (prev ? {
+      data: prev.data.filter((x) => x.id !== a.id),
+      summary: { ...prev.summary, distinctItems: prev.summary.distinctItems - 1, totalUnits: prev.summary.totalUnits - a.quantity, totalValue: prev.summary.totalValue - a.totalValue },
+    } : prev));
+    try { await api.delete(`/assets/${a.id}`); toast.success("Item removed."); }
+    catch (e) { toast.error(apiError(e)); refetch(); }
   }
 
   if (loading) return <PageLoader />;
@@ -187,7 +203,7 @@ export default function AssetsPage() {
                 </div>
                 {a.recoverable && <RecoverBadge a={a} />}
                 <div className="mt-2 flex items-center justify-between">
-                  {can("assets.manage") ? <Stepper a={a} busy={qtyBusy === a.id} onBump={bumpQty} /> : <span className="text-sm text-slate-600">Qty <b>{a.quantity}</b></span>}
+                  {can("assets.manage") ? <Stepper a={a} onBump={bumpQty} /> : <span className="text-sm text-slate-600">Qty <b>{a.quantity}</b></span>}
                   <span className="text-sm text-slate-400">{money(a.totalValue)}</span>
                 </div>
                 {can("assets.manage") && (
@@ -218,7 +234,7 @@ export default function AssetsPage() {
                     <td className="td font-medium text-slate-800">{a.name}{a.notes && <span className="block text-xs font-normal text-slate-400">{a.notes}</span>}</td>
                     <td className="td">{a.category}</td>
                     <td className="td text-slate-500">{a.location || "—"}</td>
-                    <td className="td text-center">{can("assets.manage") ? <Stepper a={a} busy={qtyBusy === a.id} onBump={bumpQty} compact /> : <b>{a.quantity}</b>}</td>
+                    <td className="td text-center">{can("assets.manage") ? <Stepper a={a} onBump={bumpQty} compact /> : <b>{a.quantity}</b>}</td>
                     <td className="td"><Badge color={CONDITION_BADGE[a.condition] ?? "gray"}>{condLabel(a.condition)}</Badge></td>
                     <td className="td text-right">{money(a.totalValue)}</td>
                     <td className="td">{a.recoverable ? <RecoverBadge a={a} /> : <span className="text-slate-300">—</span>}</td>
@@ -316,7 +332,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 // Inline − qty + control for fast count changes without opening the editor.
-function Stepper({ a, busy, onBump, compact }: { a: Asset; busy: boolean; onBump: (a: Asset, d: number) => void; compact?: boolean }) {
+function Stepper({ a, busy, onBump, compact }: { a: Asset; busy?: boolean; onBump: (a: Asset, d: number) => void; compact?: boolean }) {
   return (
     <span className={clsx("inline-flex items-center rounded-lg border border-slate-200", compact ? "" : "bg-white")}>
       <button disabled={busy} onClick={() => onBump(a, -1)} className="grid h-7 w-7 place-items-center text-slate-500 hover:bg-slate-100 disabled:opacity-40">−</button>
