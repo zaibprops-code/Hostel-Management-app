@@ -15,7 +15,7 @@ import { sound, isMuted, setMuted } from "../lib/sound";
 const GREEN = "#14442f";
 const FIELD =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 shadow-sm transition outline-none focus:border-[#c9a45c] focus:ring-2 focus:ring-[#c9a45c]/30";
-const LABEL = "mb-1 block text-xs font-semibold text-[#14442f]";
+const LABEL = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-[#14442f]/70";
 
 type Form = Record<string, string>;
 
@@ -138,7 +138,7 @@ export default function IntakePage() {
     return (
       <BrandScreen>
         <div className="mb-3 text-5xl">🔗</div>
-        <h1 className="text-lg font-bold text-slate-900">This link isn't working</h1>
+        <h1 className="font-display text-xl font-semibold text-slate-900">This link isn't working</h1>
         <p className="mt-2 text-sm text-slate-500">{invalidMsg || "The registration link is invalid or has been turned off. Please ask the hostel for a fresh link."}</p>
       </BrandScreen>
     );
@@ -151,7 +151,7 @@ export default function IntakePage() {
           <span className="grid h-20 w-20 place-items-center rounded-full bg-[#14442f] text-4xl text-white animate-[intakePop_0.5s_ease-out_both]">✓</span>
         </div>
         <img src="/riwaq-logo.png" alt="" className="mx-auto mb-4 h-14 w-14 rounded-xl object-cover" />
-        <h1 className="text-xl font-bold text-slate-900">You're all set!</h1>
+        <h1 className="font-display text-2xl font-semibold text-slate-900">You're all set!</h1>
         <p className="mt-2 text-sm text-slate-500">
           Your details have been sent to <b className="text-[#14442f]">{info?.hostelName}</b>. They'll review them and get in touch to confirm your room. You can safely close this page.
         </p>
@@ -174,10 +174,10 @@ export default function IntakePage() {
         <MuteButton muted={muted} onToggle={toggleMute} />
         <div className="relative">
           <img src="/riwaq-logo.png" alt={info?.companyName || "Logo"} className="h-28 w-28 rounded-2xl object-cover shadow-lg ring-1 ring-white/20" />
-          <h1 className="mt-6 text-3xl font-bold tracking-tight">{info?.hostelName}</h1>
-          {info?.city && <p className="mt-1 text-[#e8dcc0]/80">{info.city}</p>}
+          <h1 className="font-display mt-6 text-[32px] font-semibold leading-tight tracking-tight">{info?.hostelName}</h1>
+          {info?.city && <p className="mt-1 text-sm uppercase tracking-widest text-[#c9a45c]">{info.city}</p>}
           <div className="my-5 h-px w-16 bg-[#c9a45c]/50" />
-          <p className="max-w-sm text-lg leading-relaxed text-white/85">Welcome! Share a few details and we'll get your room ready — it only takes a couple of minutes.</p>
+          <p className="max-w-sm text-[17px] leading-relaxed text-white/85">Welcome. Share a few details and we'll have your room ready — it takes only a couple of minutes.</p>
           {genderFixed && (
             <span className="mt-5 inline-block rounded-full bg-[#c9a45c]/20 px-3 py-1 text-xs font-semibold text-[#e8dcc0] ring-1 ring-[#c9a45c]/40">
               {info?.gender === "MALE" ? "Boys hostel" : "Girls hostel"}
@@ -186,12 +186,15 @@ export default function IntakePage() {
         </div>
         <div className="relative">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#c9a45c]">Have these ready</p>
-          <ul className="space-y-2.5 text-sm text-white/85">
-            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">🪪</span> Your CNIC number (and a photo of it)</li>
-            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">📸</span> A clear face photo</li>
-            <li className="flex items-center gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 ring-1 ring-white/15">☎️</span> An emergency contact number</li>
+          <ul className="space-y-3 text-sm text-white/85">
+            {["Your CNIC number (and a photo of it)", "A clear face photo", "An emergency contact number"].map((t) => (
+              <li key={t} className="flex items-start gap-3">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#c9a45c]/20 text-[11px] font-bold text-[#e8dcc0] ring-1 ring-[#c9a45c]/40">✓</span>
+                {t}
+              </li>
+            ))}
           </ul>
-          <p className="mt-6 text-xs text-white/50">🔒 Your information is sent only to {info?.companyName}.</p>
+          <p className="mt-6 border-t border-white/10 pt-4 text-xs text-white/50">Your information is sent only to {info?.companyName}.</p>
         </div>
       </aside>
 
@@ -200,8 +203,9 @@ export default function IntakePage() {
         <div className="mx-auto w-full max-w-xl px-4 pb-36 pt-5 lg:px-10 lg:pb-16 lg:pt-12">
           {/* Desktop intro heading */}
           <div className="mb-6 hidden lg:block">
-            <h2 className="text-2xl font-bold text-[#14442f]">Resident registration</h2>
-            <p className="mt-1 text-slate-500">Fill in your details below — fields marked <span className="text-rose-500">*</span> are required.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c9a45c]">Resident registration</p>
+            <h2 className="font-display mt-2 text-[34px] font-semibold leading-tight text-[#14442f]">Let's get you settled in</h2>
+            <p className="mt-2 text-slate-500">Fill in your details below — fields marked <span className="text-rose-500">*</span> are required.</p>
           </div>
 
           {/* ---- Mobile branded header (desktop uses the panel on the left) ---- */}
@@ -209,10 +213,10 @@ export default function IntakePage() {
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#c9a45c]/10 blur-2xl" />
           <MuteButton muted={muted} onToggle={toggleMute} />
           <img src="/riwaq-logo.png" alt={info?.companyName || "Logo"} className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-lg ring-1 ring-white/20" />
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">{info?.hostelName}</h1>
-          {info?.city && <p className="text-sm text-[#e8dcc0]/80">{info.city}</p>}
+          <h1 className="font-display mt-4 text-[26px] font-semibold leading-tight tracking-tight">{info?.hostelName}</h1>
+          {info?.city && <p className="mt-1 text-xs uppercase tracking-widest text-[#c9a45c]">{info.city}</p>}
           <div className="mx-auto my-3 h-px w-16 bg-[#c9a45c]/50" />
-          <p className="text-sm text-white/85">Resident registration — tell us a little about you</p>
+          <p className="text-sm text-white/80">Resident registration — tell us a little about you</p>
           {genderFixed && (
             <span className="mt-3 inline-block rounded-full bg-[#c9a45c]/20 px-3 py-1 text-xs font-semibold text-[#e8dcc0] ring-1 ring-[#c9a45c]/40">
               {info?.gender === "MALE" ? "Boys hostel" : "Girls hostel"}
@@ -221,11 +225,11 @@ export default function IntakePage() {
         </div>
 
         <form onSubmit={submit} noValidate className="mt-5 space-y-4">
-          <Section icon="📸" title="Your photo" subtitle="A clear face photo helps the hostel recognise you at check-in." style={delay()}>
+          <Section num="01" title="Your photo" subtitle="A clear face photo helps the hostel recognise you at check-in." style={delay()}>
             <PhotoAvatar file={files.photo} converting={!!converting.photo} onPick={(f) => pickFile("photo", f)} />
           </Section>
 
-          <Section icon="🧑" title="Personal details" style={delay()}>
+          <Section num="02" title="Personal details" style={delay()}>
             <div className="space-y-3">
               <TextField id="f-fullName" label="Full name" required value={form.fullName} error={errors.fullName}
                 onChange={(e) => set("fullName", e.target.value)} placeholder="e.g. Ahmed Ali" autoComplete="name" />
@@ -254,16 +258,16 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="🎓" title="You are a…" style={delay()}>
+          <Section num="03" title="You are a…" style={delay()}>
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
-                {[["STUDENT", "Student", "🎓"], ["PROFESSIONAL", "Professional", "💼"], ["DAILY", "Short-stay", "🧳"]].map(([val, lbl, ic]) => (
+                {[["STUDENT", "Student"], ["PROFESSIONAL", "Professional"], ["DAILY", "Short-stay"]].map(([val, lbl]) => (
                   <button type="button" key={val} onClick={() => { set("occupantType", val); sound.tap(); }}
-                    className={clsx("flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs font-semibold transition active:scale-95",
+                    className={clsx("rounded-xl border px-2 py-3 text-sm font-semibold transition active:scale-95",
                       form.occupantType === val
-                        ? "border-[#14442f] bg-[#eef3ee] text-[#14442f] ring-2 ring-[#c9a45c]/40"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300")}>
-                    <span className="text-lg">{ic}</span>{lbl}
+                        ? "border-[#14442f] bg-[#14442f] text-white shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-[#c9a45c] hover:text-[#14442f]")}>
+                    {lbl}
                   </button>
                 ))}
               </div>
@@ -283,7 +287,7 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="🏠" title="Address" style={delay()}>
+          <Section num="04" title="Address" style={delay()}>
             <div className="space-y-3">
               <TextField label="Permanent address" value={form.permanentAddress} onChange={(e) => set("permanentAddress", e.target.value)} />
               <TextField label="Current address" value={form.currentAddress} onChange={(e) => set("currentAddress", e.target.value)} />
@@ -291,7 +295,7 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="🗓️" title="Your stay" subtitle="Helps the hostel plan your room." style={delay()}>
+          <Section num="05" title="Your stay" subtitle="Helps the hostel plan your room." style={delay()}>
             <div className="grid grid-cols-2 gap-3">
               <TextField label="Expected move-in date" type="date" value={form.expectedMoveIn} onChange={(e) => set("expectedMoveIn", e.target.value)} />
               <TextField label="How many months?" value={form.expectedStayMonths} onChange={(e) => set("expectedStayMonths", e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="e.g. 12" />
@@ -299,7 +303,7 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="🪪" title="ID documents" subtitle="Optional but recommended — a photo of your CNIC speeds up check-in." style={delay()}>
+          <Section num="06" title="ID documents" subtitle="Optional but recommended — a photo of your CNIC speeds up check-in." style={delay()}>
             <div className="space-y-3">
               <DocPicker label="CNIC — front" file={files.cnicFront} converting={!!converting.cnicFront} onPick={(f) => pickFile("cnicFront", f)} />
               <DocPicker label="CNIC — back" file={files.cnicBack} converting={!!converting.cnicBack} onPick={(f) => pickFile("cnicBack", f)} />
@@ -307,7 +311,7 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="🚨" title="Guardian & emergency contact" subtitle="Someone the hostel can call in an emergency." style={delay()}>
+          <Section num="07" title="Guardian & emergency contact" subtitle="Someone the hostel can call in an emergency." style={delay()}>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <TextField label="Name" value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} />
@@ -317,7 +321,7 @@ export default function IntakePage() {
             </div>
           </Section>
 
-          <Section icon="📝" title="A few more things" style={delay()}>
+          <Section num="08" title="A few more things" style={delay()}>
             <div className="space-y-3">
               <TextArea label="Medical conditions or allergies (optional)" value={form.medicalNotes} onChange={(e) => set("medicalNotes", e.target.value)}
                 placeholder="Anything the hostel should know for your safety" rows={2} />
@@ -373,14 +377,14 @@ function MuteButton({ muted, onToggle }: { muted: boolean; onToggle: () => void 
   );
 }
 
-function Section({ icon, title, subtitle, children, style }: { icon: string; title: string; subtitle?: string; children: React.ReactNode; style?: React.CSSProperties }) {
+function Section({ num, title, subtitle, children, style }: { num: string; title: string; subtitle?: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-sm animate-[intakeIn_0.5s_ease-out_both]" style={style}>
-      <div className="mb-4 flex items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eef3ee] text-lg ring-1 ring-[#14442f]/10">{icon}</span>
+    <div className="rounded-2xl border border-black/[0.06] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_1px_3px_rgba(16,24,40,0.06)] animate-[intakeIn_0.5s_ease-out_both]" style={style}>
+      <div className="mb-5 flex items-baseline gap-3 border-b border-slate-100 pb-3.5">
+        <span className="font-display text-2xl font-semibold leading-none text-[#c9a45c]">{num}</span>
         <div>
-          <h2 className="text-sm font-bold" style={{ color: GREEN }}>{title}</h2>
-          {subtitle && <p className="text-xs leading-snug text-slate-400">{subtitle}</p>}
+          <h2 className="font-display text-lg font-semibold leading-tight" style={{ color: GREEN }}>{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs leading-snug text-slate-400">{subtitle}</p>}
         </div>
       </div>
       {children}
