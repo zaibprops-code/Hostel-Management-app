@@ -481,8 +481,11 @@ function PhotoAvatar({ file, converting, onPick }: { file: File | null; converti
         <span className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-[#14442f] text-xs text-white shadow ring-2 ring-white">📷</span>
       </button>
       {file && (
-        <button type="button" onClick={() => { onPick(null); if (ref.current) ref.current.value = ""; }}
-          className="text-xs font-medium text-slate-400 hover:text-rose-500">Remove photo</button>
+        <>
+          <button type="button" onClick={() => { onPick(null); if (ref.current) ref.current.value = ""; }}
+            className="text-xs font-medium text-slate-400 hover:text-rose-500">Remove photo</button>
+          <p className="max-w-[14rem] truncate text-center text-[10px] text-slate-400">{file.name} · {file.type || "no type"} · {(file.size / 1024).toFixed(0)} KB</p>
+        </>
       )}
       <input ref={ref} type="file" accept="image/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
     </div>

@@ -1,24 +1,33 @@
 // Shrink an image in the browser before uploading. Profile photos are squeezed
 // harder (they only ever show small); documents like CNIC keep more resolution
 // and quality so the text stays crisp. Non-images (PDFs) are left untouched.
-// iPhones save photos as HEIC, which Chrome/most browsers can't decode (so they
-// won't preview, compress, or display). Detect and convert those to JPEG.
-export function isHeic(file: File): boolean {
-  return /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+// Can the browser actually render this file as an <img>? Content-based, so it
+// ignores the (often wrong or blank) MIME type and catches HEIC saved as .jpg.
+function canDecode(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(true); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+  });
 }
 
-// Convert a HEIC/HEIF file to a JPEG File (leaving anything else untouched). The
-// heic2any decoder is heavy (WASM), so it's only loaded when actually needed.
+// Return a file the browser can definitely display. Images it can already
+// decode pass straight through; anything it CAN'T (HEIC/HEIF — even a HEIC that
+// was renamed .jpg) is converted to JPEG via heic2any (heavy WASM, lazy-loaded
+// only when actually needed). Falls back to the original if conversion fails.
 export async function normalizeImage(file: File): Promise<File> {
-  if (!isHeic(file)) return file;
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return file;
+  if (await canDecode(file)) return file; // already displayable
   try {
     const heic2any = (await import("heic2any")).default;
     const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
-    const blob = Array.isArray(out) ? out[0] : out;
-    return new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
-  } catch {
-    return file; // conversion failed — fall back to the original
-  }
+    const blob = Array.isArray(out) ? (out[0] as Blob) : (out as Blob);
+    const jpg = new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    if (await canDecode(jpg)) return jpg;
+  } catch { /* couldn't convert — fall through to the original */ }
+  return file;
 }
 
 async function compress(file: File, maxDim: number, quality: number): Promise<File> {
