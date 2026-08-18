@@ -14,9 +14,9 @@ const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyR
 
 export default function HostelsPage() {
   const { can } = useAuth();
-  const { reload } = useHostels();
+  const { reload, patchLocal, removeLocal } = useHostels();
   const prompt = usePrompt();
-  const { data, loading, refetch } = useApi<any[]>("/hostels");
+  const { data, loading, refetch, setData } = useApi<any[]>("/hostels");
   const [open, setOpen] = useState(false);
   // null = creating a new hostel; otherwise the id of the hostel being edited.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,12 +48,27 @@ export default function HostelsPage() {
   }
 
   async function save() {
-    setSaving(true); setError("");
-    try {
-      if (editingId) await api.put(`/hostels/${editingId}`, form);
-      else await api.post("/hostels", form);
+    setError("");
+    if (editingId) {
+      // Optimistic edit: the list and the branch switcher update instantly,
+      // then the server call reconciles in the background.
+      const id = editingId;
+      setData((prev) => prev?.map((h) => (h.id === id ? { ...h, ...form } : h)) ?? prev);
+      patchLocal(id, { name: form.name, code: form.code, city: form.city });
       setOpen(false);
-      await refetch(); await reload();
+      try { await api.put(`/hostels/${id}`, form); }
+      catch (err) { toast.error(apiError(err)); }
+      finally { refetch(); reload(); }
+      return;
+    }
+    // Create needs the server (and may fail validation), so keep the modal open
+    // until it succeeds, then drop the new row straight into the list.
+    setSaving(true);
+    try {
+      const { data: created } = await api.post("/hostels", form);
+      setData((prev) => (prev ? [...prev, created] : [created]));
+      setOpen(false);
+      reload();
     } catch (err) { setError(apiError(err)); } finally { setSaving(false); }
   }
 
@@ -111,8 +126,11 @@ export default function HostelsPage() {
     }
     try {
       await api.delete(`/hostels/${h.id}`);
+      // Remove it in place (no full-page reload) once the server confirms.
+      setData((prev) => prev?.filter((x) => x.id !== h.id) ?? prev);
+      removeLocal(h.id);
       toast.success(`"${h.name}" was deleted.`);
-      await refetch(); await reload();
+      reload();
     } catch (err) {
       toast.error(apiError(err));
     }

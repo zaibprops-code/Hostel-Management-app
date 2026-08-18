@@ -15,7 +15,7 @@ const GRANTABLE = ["finance.viewProfit", "capital.view", "capital.manage", "depo
 export default function UsersPage() {
   const prompt = usePrompt();
   const { hostels } = useHostels();
-  const { data, loading, refetch } = useApi<any[]>("/users");
+  const { data, loading, refetch, setData } = useApi<any[]>("/users");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<null | any>(null);
   const [form, setForm] = useState<any>({ name: "", email: "", phone: "", password: "", role: "MANAGER", hostelIds: [], permissions: {} });
@@ -29,14 +29,23 @@ export default function UsersPage() {
   }
 
   async function save() {
-    setSaving(true); setError("");
+    setError("");
+    if (editing) {
+      // Optimistic edit — name/role/phone update instantly; access/permissions
+      // reconcile from the server a moment later.
+      const id = editing.id;
+      setData((prev) => prev?.map((u) => (u.id === id ? { ...u, name: form.name, phone: form.phone, role: form.role } : u)) ?? prev);
+      setOpen(false); setEditing(null);
+      try { await api.put(`/users/${id}`, { name: form.name, phone: form.phone, role: form.role, hostelIds: form.hostelIds, permissions: form.permissions }); }
+      catch (e) { toast.error(apiError(e)); }
+      finally { refetch(); }
+      return;
+    }
+    setSaving(true);
     try {
-      if (editing) {
-        await api.put(`/users/${editing.id}`, { name: form.name, phone: form.phone, role: form.role, hostelIds: form.hostelIds, permissions: form.permissions });
-      } else {
-        await api.post("/users", form);
-      }
-      setOpen(false); setEditing(null); await refetch();
+      await api.post("/users", form);
+      setOpen(false); setEditing(null);
+      refetch(); // pull the new user with its full shape
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 

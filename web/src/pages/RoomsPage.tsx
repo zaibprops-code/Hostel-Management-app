@@ -25,7 +25,7 @@ export default function RoomsPage() {
   const confirm = useConfirm();
   const { can } = useAuth();
   const { hostels, scopeParam, reload } = useHostels();
-  const { data, loading, refetch } = useApi<Room[]>(withQuery("/structure/map", scopeParam), [scopeParam]);
+  const { data, loading, refetch, setData } = useApi<Room[]>(withQuery("/structure/map", scopeParam), [scopeParam]);
   const [modal, setModal] = useState<null | "room" | "bed">(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -53,8 +53,10 @@ export default function RoomsPage() {
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function setBedStatus(bed: Bed, status: string) {
-    try { await api.patch(`/structure/beds/${bed.id}/status`, { status }); await refetch(); await reload(); }
-    catch (e) { toast.error(apiError(e)); }
+    // Optimistic: flip the bed instantly, then sync (roll back on failure).
+    setData((prev) => prev?.map((r) => ({ ...r, beds: r.beds.map((b) => (b.id === bed.id ? { ...b, status } : b)) })) ?? prev);
+    try { await api.patch(`/structure/beds/${bed.id}/status`, { status }); reload(); }
+    catch (e) { toast.error(apiError(e)); refetch(); reload(); }
   }
   // Open the assign dialog for an empty bed, loading residents in this hostel
   // who aren't assigned to a bed yet (registered / reserved / approved intakes).

@@ -16,6 +16,10 @@ interface HostelContextValue {
   setSelected: (id: string | "all") => void;
   loading: boolean;
   reload: () => Promise<void>;
+  // Optimistic, in-place updates so the branch switcher reflects a rename or
+  // removal instantly, before the server round-trip completes.
+  patchLocal: (id: string, changes: Partial<HostelLite>) => void;
+  removeLocal: (id: string) => void;
   // convenience: the hostelId query string fragment for API calls
   scopeParam: string;
 }
@@ -50,10 +54,14 @@ export function HostelProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  const patchLocal = (id: string, changes: Partial<HostelLite>) =>
+    setHostels((hs) => hs.map((h) => (h.id === id ? { ...h, ...changes } : h)));
+  const removeLocal = (id: string) => setHostels((hs) => hs.filter((h) => h.id !== id));
+
   const scopeParam = selected === "all" ? "" : `hostelId=${selected}`;
 
   return (
-    <HostelContext.Provider value={{ hostels, selected, setSelected, loading, reload, scopeParam }}>
+    <HostelContext.Provider value={{ hostels, selected, setSelected, loading, reload, patchLocal, removeLocal, scopeParam }}>
       {children}
     </HostelContext.Provider>
   );
