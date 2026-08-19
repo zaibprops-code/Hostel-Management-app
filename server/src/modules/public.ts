@@ -67,9 +67,16 @@ const intakeSchema = z.object({
   emergencyPhone: z.string().optional(),
   emergencyRelation: z.string().optional(),
   guardianPhone: optionalText,
+  guardianOccupation: optionalText,
+  businessAddress: optionalText,
+  religion: optionalText,
   nationality: optionalText,
   bloodGroup: optionalText,
   vehicle: optionalText,
+  localRefName: optionalText,
+  localRefRelation: optionalText,
+  localRefAddress: optionalText,
+  localRefPhone: optionalText,
   medicalNotes: z.string().optional(),
   howHeard: optionalText,
   expectedMoveIn: z.preprocess(
@@ -96,12 +103,14 @@ const intakeFiles = upload.fields([
   { name: "cnicFront", maxCount: 1 },
   { name: "cnicBack", maxCount: 1 },
   { name: "studentCard", maxCount: 1 },
+  { name: "jobCard", maxCount: 1 },
 ]);
 
-const DOC_FIELDS: [string, "CNIC_FRONT" | "CNIC_BACK" | "STUDENT_CARD"][] = [
+const DOC_FIELDS: [string, "CNIC_FRONT" | "CNIC_BACK" | "STUDENT_CARD" | "JOB_CARD"][] = [
   ["cnicFront", "CNIC_FRONT"],
   ["cnicBack", "CNIC_BACK"],
   ["studentCard", "STUDENT_CARD"],
+  ["jobCard", "JOB_CARD"],
 ];
 
 // POST /api/public/intake/:token — a prospective resident submits their own

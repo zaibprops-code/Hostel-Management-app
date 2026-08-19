@@ -67,6 +67,7 @@ enum DocumentType {
   PASSPORT
   STUDENT_CARD
   UNIVERSITY_CARD
+  JOB_CARD
   CONTRACT
   OTHER
 }
@@ -458,9 +459,19 @@ model Resident {
 
   // Extra details collected on the self-intake form (all optional).
   guardianPhone      String?
+  guardianOccupation String?   // guardian's job (police / tenant-verification form)
+  businessAddress    String?   // guardian's or resident's office / business address
+  religion           String?
   nationality        String?
   bloodGroup         String?
   vehicle            String?   // parking: "Bike ABC-123", "Car", "None", …
+  // Local reference — a blood relative living in the hostel's city. Pakistani
+  // police tenant-verification forms require a local contact who can vouch for
+  // the resident, so we capture and print it on the resident's profile sheet.
+  localRefName       String?
+  localRefRelation   String?
+  localRefAddress    String?
+  localRefPhone      String?
   medicalNotes       String?   // allergies / conditions the hostel should know
   howHeard           String?   // marketing: how they found the hostel
   expectedMoveIn     DateTime?

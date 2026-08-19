@@ -15,7 +15,7 @@ import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
-  ["STUDENT_CARD", "Student card"], ["UNIVERSITY_CARD", "University card"], ["CONTRACT", "Contract"], ["OTHER", "Other"],
+  ["STUDENT_CARD", "Student card"], ["UNIVERSITY_CARD", "University card"], ["JOB_CARD", "Job / employee card"], ["CONTRACT", "Contract"], ["OTHER", "Other"],
 ];
 
 export default function ResidentDetailPage() {
@@ -256,10 +256,15 @@ export default function ResidentDetailPage() {
               // Extra self-intake details — shown only when the resident provided them.
               ...([
                 ["Guardian phone", r.guardianPhone],
+                ["Guardian occupation", r.guardianOccupation],
+                ["Business address", r.businessAddress],
+                ["Religion", r.religion],
                 ["Blood group", r.bloodGroup],
                 ["Nationality", r.nationality],
                 ["Vehicle", r.vehicle],
                 ["Emergency", [r.emergencyName, r.emergencyPhone].filter(Boolean).join(" · ")],
+                ["Local reference", [r.localRefName, r.localRefRelation && `(${r.localRefRelation})`, r.localRefPhone].filter(Boolean).join(" · ")],
+                ["Reference address", r.localRefAddress],
                 ["Expected move-in", r.expectedMoveIn ? formatDate(r.expectedMoveIn) : ""],
                 ["Expected stay", r.expectedStayMonths ? `${r.expectedStayMonths} months` : ""],
                 ["Medical notes", r.medicalNotes],
@@ -514,9 +519,14 @@ function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<
     ["Full name", r.fullName],
     ["Status", titleCase(r.status)],
     ["Resident type", typeLabel],
-    ["Guardian", r.guardianName],
+    ["Father / Guardian", r.guardianName],
+    ["Guardian phone", r.guardianPhone],
+    ["Guardian occupation", r.guardianOccupation],
     ["Date of birth", r.dateOfBirth ? formatDate(r.dateOfBirth) : ""],
     ["Gender", titleCase(r.gender)],
+    ["Religion", r.religion],
+    ["Nationality", r.nationality],
+    ["Blood group", r.bloodGroup],
     ["CNIC", r.cnic],
     ["Phone", r.phone],
     ["WhatsApp", r.whatsapp],
@@ -524,7 +534,16 @@ function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<
     ["City", r.city],
     ["Permanent address", r.permanentAddress],
     ["Current address", r.currentAddress],
+    ["Business / office address", r.businessAddress],
+    ["Vehicle", r.vehicle],
     ["Emergency contact", emergency],
+  ];
+
+  const localRef: [string, any][] = [
+    ["Name", r.localRefName],
+    ["Relationship", r.localRefRelation],
+    ["Phone", r.localRefPhone],
+    ["Address in city", r.localRefAddress],
   ];
 
   const academic: [string, any][] = r.occupantType === "STUDENT"
@@ -603,6 +622,7 @@ function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<
 
       <Section title="Personal Information" rows={personal} />
       {!!academic.length && <Section title={r.occupantType === "STUDENT" ? "Academic Details" : "Professional Details"} rows={academic} />}
+      <Section title="Local Reference (for verification)" rows={localRef} />
       <Section title="Accommodation" rows={accommodation} />
 
       {/* Rent charges */}
@@ -666,7 +686,26 @@ function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<
         </div>
       )}
 
-      <div style={{ marginTop: 28, borderTop: "1px solid #e2e8f0", paddingTop: 8, fontSize: 10.5, color: "#94a3b8", textAlign: "center" }}>
+      {/* Declaration + signatures — for the printed copy handed to authorities. */}
+      <div style={{ marginTop: 24, border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 16px" }}>
+        <div style={{ fontSize: 11.5, color: "#475569", lineHeight: 1.5 }}>
+          I hereby declare that the information provided above is true and correct to the best of my knowledge.
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 28, gap: 24 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ borderTop: "1px solid #94a3b8", paddingTop: 4, fontSize: 11, color: "#64748b" }}>Resident signature &amp; date</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ height: 64, width: 96, border: "1px dashed #94a3b8", borderRadius: 6 }} />
+            <div style={{ fontSize: 10.5, color: "#64748b", marginTop: 4 }}>Thumb impression</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ borderTop: "1px solid #94a3b8", paddingTop: 4, fontSize: 11, color: "#64748b", textAlign: "right" }}>For office use — Reg # / Room #</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20, borderTop: "1px solid #e2e8f0", paddingTop: 8, fontSize: 10.5, color: "#94a3b8", textAlign: "center" }}>
         This document was generated by {company || "the hostel management system"} on {formatDateTime(new Date())}. Figures reflect the most recent records at the time of export.
       </div>
     </div>

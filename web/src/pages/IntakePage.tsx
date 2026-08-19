@@ -20,16 +20,17 @@ const LABEL = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wide te
 type Form = Record<string, string>;
 
 const BLANK: Form = {
-  fullName: "", guardianName: "", guardianPhone: "", cnic: "", dateOfBirth: "", gender: "",
-  nationality: "", bloodGroup: "", phone: "", whatsapp: "", email: "", city: "",
-  permanentAddress: "", currentAddress: "",
+  fullName: "", guardianName: "", guardianPhone: "", guardianOccupation: "", cnic: "", dateOfBirth: "", gender: "",
+  religion: "", nationality: "", bloodGroup: "", phone: "", whatsapp: "", email: "", city: "",
+  permanentAddress: "", currentAddress: "", businessAddress: "",
   occupantType: "STUDENT", university: "", program: "", studentId: "", company: "", occupation: "",
   expectedMoveIn: "", expectedStayMonths: "", vehicle: "",
+  localRefName: "", localRefRelation: "", localRefAddress: "", localRefPhone: "",
   emergencyName: "", emergencyRelation: "", emergencyPhone: "",
   medicalNotes: "", howHeard: "",
 };
 
-type Files = { photo: File | null; cnicFront: File | null; cnicBack: File | null; studentCard: File | null };
+type Files = { photo: File | null; cnicFront: File | null; cnicBack: File | null; studentCard: File | null; jobCard: File | null };
 
 // Fields that count toward the "profile complete" progress meter.
 const TRACKED = ["fullName", "phone", "cnic", "dateOfBirth", "gender", "city", "permanentAddress", "emergencyName", "emergencyPhone"];
@@ -39,7 +40,7 @@ export default function IntakePage() {
   const [state, setState] = useState<"loading" | "ok" | "invalid">("loading");
   const [info, setInfo] = useState<{ hostelName: string; city?: string; companyName: string; gender?: string | null } | null>(null);
   const [form, setForm] = useState<Form>(BLANK);
-  const [files, setFiles] = useState<Files>({ photo: null, cnicFront: null, cnicBack: null, studentCard: null });
+  const [files, setFiles] = useState<Files>({ photo: null, cnicFront: null, cnicBack: null, studentCard: null, jobCard: null });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -118,6 +119,7 @@ export default function IntakePage() {
       if (files.cnicFront) fd.append("cnicFront", await compressDocument(files.cnicFront));
       if (files.cnicBack) fd.append("cnicBack", await compressDocument(files.cnicBack));
       if (form.occupantType === "STUDENT" && files.studentCard) fd.append("studentCard", await compressDocument(files.studentCard));
+      if (form.occupantType === "PROFESSIONAL" && files.jobCard) fd.append("jobCard", await compressDocument(files.jobCard));
       await api.post(`/public/intake/${token}`, fd);
       sound.success();
       setDone(true);
@@ -187,7 +189,7 @@ export default function IntakePage() {
         <div className="relative">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#c9a45c]">Have these ready</p>
           <ul className="space-y-3 text-sm text-white/85">
-            {["Your CNIC number (and a photo of it)", "A clear face photo", "An emergency contact number"].map((t) => (
+            {["Your CNIC number (and a photo of it)", "A clear face photo", "An emergency contact number", "A local reference (a relative in this city)"].map((t) => (
               <li key={t} className="flex items-start gap-3">
                 <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#c9a45c]/20 text-[11px] font-bold text-[#e8dcc0] ring-1 ring-[#c9a45c]/40">✓</span>
                 {t}
@@ -249,6 +251,7 @@ export default function IntakePage() {
                   {["A+", "A−", "B+", "B−", "O+", "O−", "AB+", "AB−"].map((b) => <option key={b} value={b}>{b}</option>)}
                 </SelectField>
                 <TextField label="Nationality" value={form.nationality} onChange={(e) => set("nationality", e.target.value)} placeholder="Pakistani" />
+                <TextField label="Religion" value={form.religion} onChange={(e) => set("religion", e.target.value)} placeholder="Optional" />
                 <TextField id="f-phone" label="Mobile number" required value={form.phone} error={errors.phone}
                   onChange={(e) => set("phone", e.target.value)} inputMode="tel" placeholder="03xx-xxxxxxx" autoComplete="tel" />
                 <TextField label="WhatsApp number" value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} inputMode="tel" />
@@ -308,20 +311,34 @@ export default function IntakePage() {
               <DocPicker label="CNIC — front" file={files.cnicFront} converting={!!converting.cnicFront} onPick={(f) => pickFile("cnicFront", f)} />
               <DocPicker label="CNIC — back" file={files.cnicBack} converting={!!converting.cnicBack} onPick={(f) => pickFile("cnicBack", f)} />
               {isStudent && <DocPicker label="Student / University card" file={files.studentCard} converting={!!converting.studentCard} onPick={(f) => pickFile("studentCard", f)} />}
+              {isPro && <DocPicker label="Job / employee card" file={files.jobCard} converting={!!converting.jobCard} onPick={(f) => pickFile("jobCard", f)} />}
             </div>
           </Section>
 
           <Section num="07" title="Guardian & emergency contact" subtitle="Someone the hostel can call in an emergency." style={delay()}>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <TextField label="Name" value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} />
+                <TextField label="Emergency contact name" value={form.emergencyName} onChange={(e) => set("emergencyName", e.target.value)} />
                 <TextField label="Relationship" value={form.emergencyRelation} onChange={(e) => set("emergencyRelation", e.target.value)} placeholder="e.g. Father" />
+                <TextField label="Emergency phone" value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} inputMode="tel" />
+                <TextField label="Guardian's occupation" value={form.guardianOccupation} onChange={(e) => set("guardianOccupation", e.target.value)} />
               </div>
-              <TextField label="Phone number" value={form.emergencyPhone} onChange={(e) => set("emergencyPhone", e.target.value)} inputMode="tel" />
+              <TextField label="Business / office address" value={form.businessAddress} onChange={(e) => set("businessAddress", e.target.value)} placeholder="Guardian's or your workplace address" />
             </div>
           </Section>
 
-          <Section num="08" title="A few more things" style={delay()}>
+          <Section num="08" title="Local reference" subtitle="A relative living in this city the hostel can contact to verify you. This is required for police tenant verification." style={delay()}>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <TextField label="Reference name" value={form.localRefName} onChange={(e) => set("localRefName", e.target.value)} placeholder="Relative in the city" />
+                <TextField label="Relationship" value={form.localRefRelation} onChange={(e) => set("localRefRelation", e.target.value)} placeholder="e.g. Uncle" />
+                <TextField label="Their phone" value={form.localRefPhone} onChange={(e) => set("localRefPhone", e.target.value)} inputMode="tel" />
+              </div>
+              <TextField label="Their address in the city" value={form.localRefAddress} onChange={(e) => set("localRefAddress", e.target.value)} />
+            </div>
+          </Section>
+
+          <Section num="09" title="A few more things" style={delay()}>
             <div className="space-y-3">
               <TextArea label="Medical conditions or allergies (optional)" value={form.medicalNotes} onChange={(e) => set("medicalNotes", e.target.value)}
                 placeholder="Anything the hostel should know for your safety" rows={2} />
