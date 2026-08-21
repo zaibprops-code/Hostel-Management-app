@@ -37,20 +37,73 @@ inventoryRouter.post("/", requirePermission("inventory.manage"), validateBody(z.
   res.status(201).json({ ...item, quantity: dec(item.quantity) });
 }));
 
-// Stock movement (purchase adds, consumption/waste subtract)
+// Full stock-movement history ("rashan" intake log) across the accessible
+// hostels: what was brought in, used, wasted or corrected — newest first — plus
+// a running total of what was purchased this month so the kitchen spend is
+// visible at a glance. Registered before "/:id/transaction" (POST) with no
+// clashing GET "/:id", so the literal path resolves cleanly.
+inventoryRouter.get("/transactions", requirePermission("inventory.view"), asyncHandler(async (req, res) => {
+  const scope = await hostelScope(req);
+  const items = await prisma.inventoryItem.findMany({ where: scope, select: { id: true } });
+  const ids = items.map((i) => i.id);
+
+  const txns = ids.length
+    ? await prisma.inventoryTransaction.findMany({
+        where: { itemId: { in: ids } },
+        orderBy: { date: "desc" },
+        take: 300,
+        include: { item: { select: { name: true, unit: true, category: true, hostel: { select: { name: true } } } } },
+      })
+    : [];
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthPurchases = ids.length
+    ? await prisma.inventoryTransaction.findMany({
+        where: { itemId: { in: ids }, type: "PURCHASE", date: { gte: monthStart } },
+        select: { quantity: true, unitCost: true },
+      })
+    : [];
+  const monthPurchaseTotal = monthPurchases.reduce((s, t) => s + dec(t.quantity) * dec(t.unitCost), 0);
+
+  res.json({
+    transactions: txns.map((t) => ({
+      id: t.id,
+      type: t.type,
+      quantity: dec(t.quantity),
+      unitCost: dec(t.unitCost),
+      total: dec(t.quantity) * dec(t.unitCost),
+      note: t.note,
+      date: t.date,
+      item: t.item.name,
+      unit: t.item.unit,
+      category: t.item.category,
+      hostel: t.item.hostel.name,
+    })),
+    summary: { monthPurchaseTotal, monthPurchaseCount: monthPurchases.length },
+  });
+}));
+
+// Stock movement (purchase adds, consumption/waste subtract). `date` is optional
+// so a purchase can be back-dated to when the rashan actually arrived.
 inventoryRouter.post("/:id/transaction", requirePermission("inventory.manage"), validateBody(z.object({
   type: z.enum(["PURCHASE", "CONSUMPTION", "WASTE", "ADJUSTMENT"]), quantity: z.coerce.number().positive(),
   unitCost: z.coerce.number().min(0).default(0), note: z.string().optional(),
+  date: z.coerce.date().optional(),
 })), asyncHandler(async (req, res) => {
   const item = await prisma.inventoryItem.findUnique({ where: { id: req.params.id } });
   if (!item) throw notFound("Item not found");
   await assertHostelAccess(req, item.hostelId);
-  const delta = req.body.type === "PURCHASE" || req.body.type === "ADJUSTMENT" ? req.body.quantity : -req.body.quantity;
+  const { type, quantity, unitCost, note, date } = req.body;
+  const delta = type === "PURCHASE" || type === "ADJUSTMENT" ? quantity : -quantity;
   const result = await prisma.$transaction(async (tx) => {
-    await tx.inventoryTransaction.create({ data: { itemId: item.id, ...req.body } });
-    return tx.inventoryItem.update({ where: { id: item.id }, data: { quantity: { increment: delta } } });
+    await tx.inventoryTransaction.create({ data: { itemId: item.id, type, quantity, unitCost, note, ...(date ? { date } : {}) } });
+    // Keep the item's reference purchase price fresh from the latest buy.
+    const bump = type === "PURCHASE" && unitCost > 0 ? { purchasePrice: unitCost } : {};
+    return tx.inventoryItem.update({ where: { id: item.id }, data: { quantity: { increment: delta }, ...bump } });
   });
-  await audit({ userId: req.auth!.id, action: "inventory.transaction", entity: "InventoryItem", entityId: item.id, hostelId: item.hostelId, newValue: { type: req.body.type, quantity: req.body.quantity } });
+  await audit({ userId: req.auth!.id, action: "inventory.transaction", entity: "InventoryItem", entityId: item.id, hostelId: item.hostelId, newValue: { type, quantity } });
   res.json({ ...result, quantity: dec(result.quantity) });
 }));
 
