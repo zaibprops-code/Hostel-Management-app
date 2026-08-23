@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api, apiError, assetUrl } from "../lib/api";
 import { toast } from "../lib/toast";
@@ -187,19 +187,24 @@ export default function ResidentDetailPage() {
         title={r.fullName}
         mobileTitle
         actions={
-          <div className="flex gap-2 flex-wrap">
+          <>
             <Link to="/admissions" className="btn-secondary">← Back</Link>
-            <Button loading={exporting === "formSave"} disabled={!!exporting} onClick={() => exportForm("save")}>Registration Form</Button>
-            {canShareFiles() && <Button variant="secondary" loading={exporting === "formShare"} disabled={!!exporting} onClick={() => exportForm("share")}>Share Form</Button>}
-            <Button variant="secondary" loading={exporting === "save"} disabled={!!exporting} onClick={() => exportProfile("save")}>Full Profile PDF</Button>
-            {canShareFiles() && <Button variant="secondary" loading={exporting === "share"} disabled={!!exporting} onClick={() => exportProfile("share")}>Share Profile</Button>}
             {can("admissions.manage") && r.status === "RESERVED" && <Button onClick={openAdmit}>Admit / Assign Bed</Button>}
             {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
-            {can("residents.manage") && r.status === "ACTIVE" && <Button variant="secondary" onClick={() => setNotice(true)}>Give Notice</Button>}
-            {can("residents.manage") && !r.userId && <Button variant="secondary" onClick={() => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); }}>Create Portal Login</Button>}
-            {can("residents.manage") && active && <Button variant="danger" onClick={() => setCheckout(true)}>Checkout</Button>}
-            {can("residents.manage") && <Button variant="secondary" className="text-rose-600" onClick={deleteResident}>Delete</Button>}
-          </div>
+            <MoreMenu
+              busy={!!exporting}
+              items={[
+                { label: "📄 Registration Form", onClick: () => exportForm("save"), disabled: !!exporting },
+                canShareFiles() ? { label: "📤 Share Form", onClick: () => exportForm("share"), disabled: !!exporting } : null,
+                { label: "📑 Full Profile PDF", onClick: () => exportProfile("save"), disabled: !!exporting },
+                canShareFiles() ? { label: "📤 Share Profile", onClick: () => exportProfile("share"), disabled: !!exporting } : null,
+                (can("residents.manage") && r.status === "ACTIVE") ? { label: "🔔 Give Notice", onClick: () => setNotice(true) } : null,
+                (can("residents.manage") && !r.userId) ? { label: "🔑 Create Portal Login", onClick: () => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); } } : null,
+                (can("residents.manage") && active) ? { label: "🚪 Checkout", onClick: () => setCheckout(true) } : null,
+                can("residents.manage") ? { label: "🗑 Delete resident", onClick: deleteResident, danger: true } : null,
+              ]}
+            />
+          </>
         }
       />
 
@@ -908,6 +913,40 @@ function RegistrationFormSheet({ innerRef, r, company, photoUrl }: { innerRef: R
       <div style={{ marginTop: 14, textAlign: "center", fontSize: 9.5, color: "#9aa3af" }}>
         {company || "Riwaq Hostels"} · Generated {formatDateTime(new Date())}
       </div>
+    </div>
+  );
+}
+
+// A compact "⋯ More" dropdown that keeps the header tidy by folding the many
+// secondary actions (exports, notice, checkout, delete…) into one menu.
+type MenuItem = { label: string; onClick: () => void; danger?: boolean; disabled?: boolean } | null | false;
+function MoreMenu({ items, busy }: { items: MenuItem[]; busy?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const list = items.filter(Boolean) as Exclude<MenuItem, null | false>[];
+  if (!list.length) return null;
+  return (
+    <div className="relative" ref={ref}>
+      <Button variant="secondary" onClick={() => setOpen((o) => !o)}>{busy ? "Working…" : "More ▾"}</Button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {list.map((it, i) => (
+            <button
+              key={i}
+              disabled={it.disabled}
+              onClick={() => { setOpen(false); it.onClick(); }}
+              className={`block w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${it.danger ? "text-rose-600" : "text-slate-700"}`}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
