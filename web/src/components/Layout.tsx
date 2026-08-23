@@ -165,7 +165,7 @@ export default function Layout() {
         </header>
 
         {/* Page content — extra bottom padding on mobile to clear the tab bar */}
-        <main className="flex-1 p-4 lg:p-6 max-w-[1400px] w-full mx-auto pb-24 lg:pb-6">
+        <main className="flex-1 p-4 lg:p-6 max-w-[1200px] w-full mx-auto pb-24 lg:pb-6">
           <Outlet />
         </main>
       </div>
