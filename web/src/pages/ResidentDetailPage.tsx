@@ -29,13 +29,13 @@ export default function ResidentDetailPage() {
   const [exporting, setExporting] = useState<"" | "save" | "share" | "formSave" | "formShare">("");
   const [admitOpen, setAdmitOpen] = useState(false);
   const [availBeds, setAvailBeds] = useState<any[]>([]);
-  const [admitForm, setAdmitForm] = useState<any>({ bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH" });
+  const [admitForm, setAdmitForm] = useState<any>({ bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: false });
   const [pay, setPay] = useState(false);
   const [notice, setNotice] = useState(false);
   const [checkout, setCheckout] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [payForm, setPayForm] = useState<any>({ amount: 0, method: "CASH", reference: "" });
+  const [payForm, setPayForm] = useState<any>({ amount: 0, method: "CASH", reference: "", paidAt: new Date().toISOString().slice(0, 10), chargeId: "" });
   const [payProof, setPayProof] = useState<File | null>(null);
   const [coForm, setCoForm] = useState<any>({ checkoutDate: new Date().toISOString().slice(0, 10), damageCharges: 0, otherCharges: 0, inspectionNotes: "" });
   const [portal, setPortal] = useState(false);
@@ -85,14 +85,37 @@ export default function ResidentDetailPage() {
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
+  // Open the payment modal, optionally pre-targeting a specific month's charge.
+  // Amount defaults to that month's balance, or the full outstanding otherwise.
+  function openPay(chargeId?: string) {
+    const charge = chargeId ? r.rentCharges.find((c: any) => c.id === chargeId) : null;
+    setPayForm({
+      amount: charge ? charge.balance : (r.outstanding || 0),
+      method: "CASH",
+      reference: "",
+      paidAt: new Date().toISOString().slice(0, 10),
+      chargeId: chargeId || "",
+    });
+    setPayProof(null);
+    setError("");
+    setPay(true);
+  }
+
   async function recordPayment() {
     setSaving(true); setError("");
     try {
-      const { data } = await api.post("/payments", { residentId: id, ...payForm });
+      const { data } = await api.post("/payments", {
+        residentId: id,
+        amount: payForm.amount,
+        method: payForm.method,
+        reference: payForm.reference || undefined,
+        paidAt: payForm.paidAt || undefined,
+        chargeIds: payForm.chargeId ? [payForm.chargeId] : undefined,
+      });
       if (payProof && data?.id) {
         await uploadFile({ scope: "payment.proof", paymentId: data.id, file: await compressDocument(payProof) }).catch(() => {});
       }
-      setPay(false); setPayForm({ amount: 0, method: "CASH", reference: "" }); setPayProof(null); await refetch();
+      setPay(false); setPayProof(null); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function uploadPaymentProof(paymentId: string, file?: File) {
@@ -118,7 +141,7 @@ export default function ResidentDetailPage() {
     try {
       const { data } = await api.get(`/structure/available-beds?hostelId=${r.hostel.id}`);
       setAvailBeds(data);
-      setAdmitForm({ bedId: data[0]?.id ?? "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: data[0]?.monthlyRent ?? r.monthlyRent ?? 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH" });
+      setAdmitForm({ bedId: data[0]?.id ?? "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: data[0]?.monthlyRent ?? r.monthlyRent ?? 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: false });
       setAdmitOpen(true);
     } catch (e) { toast.error(apiError(e)); }
   }
@@ -126,7 +149,7 @@ export default function ResidentDetailPage() {
     if (!admitForm.bedId) { setError("Please select a bed."); return; }
     setSaving(true); setError("");
     try {
-      await api.post("/admissions", { residentId: id, bedId: admitForm.bedId, admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, depositAmount: admitForm.depositAmount, initialPayment: admitForm.initialPayment, paymentMethod: admitForm.paymentMethod });
+      await api.post("/admissions", { residentId: id, bedId: admitForm.bedId, admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, depositAmount: admitForm.depositAmount, initialPayment: admitForm.initialPayment, paymentMethod: admitForm.paymentMethod });
       setAdmitOpen(false); toast.success("Resident admitted and bed assigned."); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
@@ -190,7 +213,7 @@ export default function ResidentDetailPage() {
           <>
             <Link to="/admissions" className="btn-secondary">← Back</Link>
             {can("admissions.manage") && r.status === "RESERVED" && <Button onClick={openAdmit}>Admit / Assign Bed</Button>}
-            {can("payments.manage") && active && <Button onClick={() => setPay(true)}>Record Payment</Button>}
+            {can("payments.manage") && active && <Button onClick={() => openPay()}>Record Payment</Button>}
             <MoreMenu
               busy={!!exporting}
               items={[
@@ -346,7 +369,7 @@ export default function ResidentDetailPage() {
                 )}
               </div>
               {r.rentCycle.status !== "PAID" && can("payments.manage") && active && (
-                <Button className="mt-3 w-full" onClick={() => setPay(true)}>Record Payment</Button>
+                <Button className="mt-3 w-full" onClick={() => openPay()}>Record Payment</Button>
               )}
             </Card>
           )}
@@ -363,9 +386,14 @@ export default function ResidentDetailPage() {
                         <p className="text-sm font-medium text-slate-700">{c.periodMonth}/{c.periodYear}</p>
                         <p className="text-xs text-slate-400">Paid {formatPKR(c.amountPaid)} of {formatPKR(c.amount)}</p>
                       </div>
-                      <div className="text-right">
-                        <StatusBadge status={c.status} />
-                        {c.balance > 0 && <p className="text-xs text-rose-600 font-medium mt-1">{formatPKR(c.balance)} due</p>}
+                      <div className="text-right flex items-center gap-3">
+                        <div>
+                          <StatusBadge status={c.status} />
+                          {c.balance > 0 && <p className="text-xs text-rose-600 font-medium mt-1">{formatPKR(c.balance)} due</p>}
+                        </div>
+                        {c.balance > 0 && can("payments.manage") && active && (
+                          <button onClick={() => openPay(c.id)} className="text-brand-600 text-sm font-medium">Pay</button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -373,7 +401,7 @@ export default function ResidentDetailPage() {
                 {/* Desktop: table */}
                 <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead>
+                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                       {r.rentCharges.map((c: any) => (
                         <tr key={c.id} className="border-t border-slate-100">
@@ -381,6 +409,9 @@ export default function ResidentDetailPage() {
                           <td>{formatPKR(c.amount)}</td><td>{formatPKR(c.amountPaid)}</td>
                           <td className={c.balance > 0 ? "text-rose-600 font-medium" : ""}>{formatPKR(c.balance)}</td>
                           <td><StatusBadge status={c.status} /></td>
+                          <td className="text-right">{c.balance > 0 && can("payments.manage") && active && (
+                            <button onClick={() => openPay(c.id)} className="text-brand-600 font-medium hover:underline">Pay</button>
+                          )}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -417,8 +448,64 @@ export default function ResidentDetailPage() {
 
       {/* Payment modal */}
       <Modal open={pay} onClose={() => setPay(false)} title="Record Payment">
+        {(() => {
+          const unpaid = (r.rentCharges ?? []).filter((c: any) => c.balance > 0)
+            .sort((a: any, b: any) => a.periodYear - b.periodYear || a.periodMonth - b.periodMonth);
+          const target = payForm.chargeId ? unpaid.find((c: any) => c.id === payForm.chargeId) : null;
+          const amt = Number(payForm.amount) || 0;
+          const settleTarget = target ? (amt >= target.balance ? "full" : amt > 0 ? "partial" : "none") : null;
+          return (
         <div className="space-y-3">
-          <MoneyInput label="Amount" value={payForm.amount} onChange={(n) => setPayForm({ ...payForm, amount: n })} />
+          {r.outstanding > 0 ? (
+            <div className="rounded-lg bg-rose-50 border border-rose-100 px-3 py-2 text-sm flex items-center justify-between">
+              <span className="text-rose-700">Total outstanding</span>
+              <span className="font-bold text-rose-700">{formatPKR(r.outstanding)}</span>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-700">All rent is paid up. This will be recorded as an advance.</div>
+          )}
+
+          <Select label="Apply to" value={payForm.chargeId}
+            onChange={(e) => {
+              const c = unpaid.find((x: any) => x.id === e.target.value);
+              setPayForm({ ...payForm, chargeId: e.target.value, amount: c ? c.balance : (r.outstanding || payForm.amount) });
+            }}>
+            <option value="">Oldest unpaid month first (automatic)</option>
+            {unpaid.map((c: any) => (
+              <option key={c.id} value={c.id}>{c.periodMonth}/{c.periodYear} — {formatPKR(c.balance)} due</option>
+            ))}
+          </Select>
+
+          <div className="grid grid-cols-2 gap-3">
+            <MoneyInput label="Amount" value={payForm.amount} onChange={(n) => setPayForm({ ...payForm, amount: n })} />
+            <Input label="Date paid" type="date" value={payForm.paidAt} onChange={(e) => setPayForm({ ...payForm, paidAt: e.target.value })} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {target && (
+              <button type="button" onClick={() => setPayForm({ ...payForm, amount: target.balance })}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-600">
+                This month: {formatPKR(target.balance)}
+              </button>
+            )}
+            {r.outstanding > 0 && (
+              <button type="button" onClick={() => setPayForm({ ...payForm, amount: r.outstanding, chargeId: "" })}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-brand-400 hover:text-brand-600">
+                Full outstanding: {formatPKR(r.outstanding)}
+              </button>
+            )}
+          </div>
+
+          {settleTarget && (
+            <p className="text-xs text-slate-500">
+              {settleTarget === "full"
+                ? `Marks ${target.periodMonth}/${target.periodYear} as fully paid${amt > target.balance ? `; extra ${formatPKR(amt - target.balance)} goes to other months / advance.` : "."}`
+                : settleTarget === "partial"
+                ? `Partial — ${formatPKR(target.balance - amt)} will still be due for ${target.periodMonth}/${target.periodYear}.`
+                : "Enter an amount."}
+            </p>
+          )}
+
           <Select label="Method" value={payForm.method} onChange={(e) => setPayForm({ ...payForm, method: e.target.value })}>
             {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
           </Select>
@@ -430,10 +517,12 @@ export default function ResidentDetailPage() {
               <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setPayProof(e.target.files?.[0] ?? null)} />
             </label>
           </label>
-          <p className="text-xs text-slate-400">Payment is auto-allocated to the oldest outstanding rent first.</p>
+          {!payForm.chargeId && <p className="text-xs text-slate-400">Payment is auto-allocated to the oldest outstanding rent first.</p>}
           <ErrorText>{error}</ErrorText>
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => { setPay(false); setPayProof(null); }}>Cancel</Button><Button loading={saving} onClick={recordPayment}>Save Payment</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => { setPay(false); setPayProof(null); }}>Cancel</Button><Button loading={saving} disabled={!payForm.amount} onClick={recordPayment}>Save Payment</Button></div>
         </div>
+          );
+        })()}
       </Modal>
 
       {/* Portal login modal */}
@@ -513,6 +602,37 @@ export default function ResidentDetailPage() {
                 <MoneyInput label="Monthly rent" value={admitForm.monthlyRent} onChange={(n) => setAdmitForm({ ...admitForm, monthlyRent: n })} />
                 <MoneyInput label="Security deposit" value={admitForm.depositAmount} onChange={(n) => setAdmitForm({ ...admitForm, depositAmount: n })} />
               </div>
+              <Select label="Rent cycle" value={admitForm.billingMode} onChange={(e) => setAdmitForm({ ...admitForm, billingMode: e.target.value })}>
+                <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
+                <option value="CALENDAR">Calendar month</option>
+              </Select>
+              {admitForm.billingMode === "CALENDAR" && (
+                <Select label="First charge" value={admitForm.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setAdmitForm({ ...admitForm, proratedFirst: e.target.value === "PRO" })}>
+                  <option value="FULL">Charge a full month now</option>
+                  <option value="PRO">Charge only the remaining days this month (pro-rata)</option>
+                </Select>
+              )}
+              {(() => {
+                const rent = admitForm.monthlyRent || 0;
+                const d = new Date(admitForm.admissionDate);
+                let first = Math.round(rent);
+                if (admitForm.billingMode === "CALENDAR" && admitForm.proratedFirst && !isNaN(d.getTime())) {
+                  const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                  first = Math.round((rent * (dim - d.getDate() + 1)) / dim);
+                }
+                return (
+                  <div className="rounded-xl bg-brand-50 p-3 text-sm">
+                    <div className="flex items-center justify-between"><span className="text-slate-600">First charge now</span><span className="font-bold text-brand-700">{formatPKR(first)}</span></div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {admitForm.billingMode === "ANCHORED"
+                        ? `Then ${formatPKR(rent)} every month on day ${isNaN(d.getTime()) ? "?" : d.getDate()}.`
+                        : admitForm.proratedFirst
+                        ? `Pro-rated for the days left this month; then ${formatPKR(rent)} each calendar month.`
+                        : `Then ${formatPKR(rent)} each calendar month.`}
+                    </p>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <MoneyInput label="Initial payment (optional)" value={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
                 <Select label="Method" value={admitForm.paymentMethod} onChange={(e) => setAdmitForm({ ...admitForm, paymentMethod: e.target.value })}>
