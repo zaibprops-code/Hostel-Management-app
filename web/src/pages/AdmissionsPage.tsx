@@ -34,13 +34,33 @@ function RentBadge({ status }: { status?: string | null }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${RENT_BADGE[status].cls}`}>{RENT_BADGE[status].label}</span>;
 }
 
+// Current local date-time in the format a datetime-local input expects.
+function localDateTime(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+// Preview of the first rent charge (mirrors the server's rules) so the owner
+// sees exactly what will be billed before admitting.
+function firstChargePreview(f: any): number {
+  const rent = f.monthlyRent || 0;
+  if (f.billingMode === "CALENDAR" && f.proratedFirst) {
+    const d = new Date(f.admissionDate);
+    if (isNaN(d.getTime())) return Math.round(rent);
+    const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const remaining = dim - d.getDate() + 1;
+    return Math.round((rent * remaining) / dim);
+  }
+  return Math.round(rent);
+}
+
 const EMPTY = {
   // resident details
   hostelId: "", fullName: "", guardianName: "", phone: "", cnic: "", gender: "MALE", city: "",
   occupantType: "STUDENT", university: "", program: "", company: "", occupation: "",
   // admission details
-  bedId: "", roomId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0,
-  rentDueDay: 1, contractMonths: 12, foodPlanId: "", initialPayment: 0, paymentMethod: "CASH",
+  bedId: "", roomId: "", admissionDate: localDateTime(), monthlyRent: 0, depositAmount: 0,
+  rentDueDay: 1, contractMonths: 12, billingMode: "CALENDAR", proratedFirst: false, foodPlanId: "", initialPayment: 0, paymentMethod: "CASH",
   // daily / short-stay
   dailyRate: 0, nights: 1, guests: 1,
 };
@@ -136,6 +156,8 @@ export default function AdmissionsPage() {
         guests: form.guests,
         depositAmount: form.depositAmount,
         rentDueDay: form.rentDueDay,
+        billingMode: form.billingMode,
+        proratedFirst: form.proratedFirst,
         contractMonths: form.contractMonths,
         foodPlanId: form.foodPlanId || undefined,
         initialPayment: form.initialPayment,
@@ -335,7 +357,7 @@ export default function AdmissionsPage() {
 
           {(form.occupantType === "DAILY" ? form.roomId : form.bedId) && (
             <>
-              <Input label={form.occupantType === "DAILY" ? "Check-in date" : "Admission date"} type="date" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} />
+              <Input label={form.occupantType === "DAILY" ? "Check-in date & time" : "Admission date & time"} type="datetime-local" value={form.admissionDate} onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} />
 
               {form.occupantType === "DAILY" ? (
                 <>
@@ -351,6 +373,30 @@ export default function AdmissionsPage() {
                 <>
                   <MoneyInput label="Monthly rent" value={form.monthlyRent} onChange={(n) => setForm({ ...form, monthlyRent: n })} />
                   <NumberInput label="Contract (months)" value={form.contractMonths} onChange={(n) => setForm({ ...form, contractMonths: n })} />
+
+                  <Select label="Rent cycle" value={form.billingMode} onChange={(e) => setForm({ ...form, billingMode: e.target.value })}>
+                    <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
+                    <option value="CALENDAR">Calendar month (1st–{form.rentDueDay || "10"}th)</option>
+                  </Select>
+                  {form.billingMode === "CALENDAR" && (
+                    <Select label="First charge" value={form.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setForm({ ...form, proratedFirst: e.target.value === "PRO" })}>
+                      <option value="FULL">Charge a full month now</option>
+                      <option value="PRO">Charge only the remaining days this month (pro-rata)</option>
+                    </Select>
+                  )}
+                  <div className="rounded-xl bg-brand-50 p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">First charge now</span>
+                      <span className="font-bold text-brand-700">{formatPKR(firstChargePreview(form))}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {form.billingMode === "ANCHORED"
+                        ? `Then ${formatPKR(form.monthlyRent || 0)} every month on day ${new Date(form.admissionDate).getDate() || "?"}.`
+                        : form.proratedFirst
+                          ? `Pro-rated for the days left this month; then ${formatPKR(form.monthlyRent || 0)} each calendar month.`
+                          : `Then ${formatPKR(form.monthlyRent || 0)} each calendar month.`}
+                    </p>
+                  </div>
                 </>
               )}
 

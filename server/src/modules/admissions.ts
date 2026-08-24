@@ -5,7 +5,7 @@ import { asyncHandler, badRequest, conflict, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
-import { ensureRentCharge } from "../lib/rent";
+import { ensureRentCharge, firstChargeAmount } from "../lib/rent";
 import { nextReceiptNo } from "../lib/receipts";
 import { dec } from "../lib/query";
 
@@ -44,6 +44,9 @@ const admissionSchema = z
     guests: z.coerce.number().int().min(1).default(1),
     depositAmount: z.coerce.number().min(0).default(0),
     rentDueDay: z.coerce.number().int().min(1).max(28).default(1),
+    // Rent scheduling for this resident.
+    billingMode: z.enum(["CALENDAR", "ANCHORED"]).default("CALENDAR"),
+    proratedFirst: z.coerce.boolean().default(false),
     contractMonths: z.coerce.number().int().min(0).optional(),
     foodPlanId: z.string().optional(),
     initialPayment: z.coerce.number().min(0).default(0),
@@ -135,6 +138,11 @@ router.post(
           guests: isDaily ? Math.max(1, body.guests || 1) : null,
           expectedCheckout,
           contractMonths: isDaily ? null : body.contractMonths,
+          billingMode: isDaily ? "CALENDAR" : body.billingMode,
+          // Anchored cycles are due on the join day; calendar cycles fall back
+          // to the hostel's rent-due day (billingDay stays null).
+          billingDay: !isDaily && body.billingMode === "ANCHORED" ? Math.min(body.admissionDate.getDate(), 28) : null,
+          proratedFirst: !isDaily && body.billingMode === "CALENDAR" ? body.proratedFirst : false,
           foodPlanId: body.foodPlanId,
         },
       });
@@ -157,14 +165,23 @@ router.post(
         },
       });
 
-      // 4. Rent charge — one month for long-term, one stay total for daily guests
+      // 4. First rent charge — daily: the whole-stay total; monthly: honours the
+      // cycle mode and first-period choice (full month, or pro-rated days).
+      const firstDueDay = isDaily
+        ? body.admissionDate.getDate()
+        : body.billingMode === "ANCHORED"
+          ? Math.min(body.admissionDate.getDate(), 28)
+          : rentDueDay;
+      const firstAmount = isDaily
+        ? chargeAmount
+        : firstChargeAmount(body.billingMode, body.proratedFirst, body.admissionDate, body.monthlyRent);
       const charge = await ensureRentCharge(tx, {
         hostelId,
         residentId,
         year: body.admissionDate.getFullYear(),
         month: body.admissionDate.getMonth() + 1,
-        amount: chargeAmount,
-        dueDay: isDaily ? body.admissionDate.getDate() : rentDueDay,
+        amount: firstAmount,
+        dueDay: firstDueDay,
       });
 
       // 5. Security deposit (kept separate from revenue)

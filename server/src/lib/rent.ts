@@ -54,8 +54,47 @@ export async function ensureRentCharge(
   });
 }
 
-// Generates rent charges for every active resident up to the current month.
-// Returns the number of new charges created. Safe to run repeatedly.
+// Days in a given month (m is 1-12).
+export function daysInMonth(y: number, m: number): number {
+  return new Date(y, m, 0).getDate();
+}
+
+// Pro-rated rent for the partial first calendar month: from the join day to the
+// end of that month (inclusive), by actual days.
+export function proratedFirstAmount(admissionDate: Date, monthlyRent: number): number {
+  const y = admissionDate.getFullYear();
+  const m = admissionDate.getMonth() + 1;
+  const dim = daysInMonth(y, m);
+  const remaining = dim - admissionDate.getDate() + 1;
+  return Math.round((monthlyRent * remaining) / dim);
+}
+
+// The amount of a resident's VERY FIRST rent charge, honouring the cycle mode
+// and the first-period choice made at admission. Anchored cycles always start
+// as a full month on the join day; only calendar mode can be pro-rated.
+export function firstChargeAmount(mode: string, prorated: boolean, admissionDate: Date, monthlyRent: number): number {
+  if (mode === "CALENDAR" && prorated) return proratedFirstAmount(admissionDate, monthlyRent);
+  return Math.round(monthlyRent);
+}
+
+// The due day to use for a resident: their own billingDay if set, else the
+// join day for anchored cycles, else the hostel's rent-due day.
+export function residentDueDay(
+  r: { billingMode: string; billingDay: number | null; admissionDate: Date | null },
+  hostelDay: number
+): number {
+  if (r.billingDay) return Math.min(r.billingDay, 28);
+  if (r.billingMode === "ANCHORED" && r.admissionDate) return Math.min(r.admissionDate.getDate(), 28);
+  return Math.min(hostelDay || 10, 28);
+}
+
+// Generates rent charges for every active resident up to the current cycle.
+// Honours each resident's billing mode:
+//   • CALENDAR — one charge per calendar month (the first pro-rated if chosen),
+//     due on the resident's billing day (or the hostel's).
+//   • ANCHORED — one full charge per personal monthly cycle starting on the
+//     join day (12th → 12th → 12th …).
+// Returns the number of new charges created. Idempotent — safe to run often.
 export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]): Promise<number> {
   const now = new Date();
   const residents = await prisma.resident.findMany({
@@ -67,44 +106,52 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     },
   });
 
-  // Each hostel's "rent due by" day drives the charge due dates.
   const hostelRows = await prisma.hostel.findMany({
     where: { id: { in: [...new Set(residents.map((r) => r.hostelId))] } },
     select: { id: true, rentDueDay: true },
   });
   const dueDayOf = new Map(hostelRows.map((h) => [h.id, h.rentDueDay]));
 
+  // Whether cycle month (y,m) has started as of now.
+  const started = (y: number, m0: number) =>
+    y < now.getFullYear() || (y === now.getFullYear() && m0 <= now.getMonth());
+
   let created = 0;
   for (const r of residents) {
-    if (!r.admissionDate) continue;
-    const dueDay = dueDayOf.get(r.hostelId) ?? 10;
-    const start = new Date(r.admissionDate.getFullYear(), r.admissionDate.getMonth(), 1);
-    const cursor = new Date(start);
-    while (
-      cursor.getFullYear() < now.getFullYear() ||
-      (cursor.getFullYear() === now.getFullYear() && cursor.getMonth() <= now.getMonth())
-    ) {
+    const admission = r.admissionDate;
+    if (!admission) continue;
+    const rent = Number(r.monthlyRent);
+    const hostelDay = dueDayOf.get(r.hostelId) ?? 10;
+    const dueDay = residentDueDay(r, hostelDay);
+
+    const ensure = async (y: number, m: number, amount: number, due: number) => {
       const before = await prisma.rentCharge.findUnique({
-        where: {
-          residentId_periodYear_periodMonth: {
-            residentId: r.id,
-            periodYear: cursor.getFullYear(),
-            periodMonth: cursor.getMonth() + 1,
-          },
-        },
+        where: { residentId_periodYear_periodMonth: { residentId: r.id, periodYear: y, periodMonth: m } },
       });
-      if (!before) {
-        await ensureRentCharge(prisma, {
-          hostelId: r.hostelId,
-          residentId: r.id,
-          year: cursor.getFullYear(),
-          month: cursor.getMonth() + 1,
-          amount: Number(r.monthlyRent),
-          dueDay,
-        });
-        created++;
+      if (before) return;
+      await ensureRentCharge(prisma, { hostelId: r.hostelId, residentId: r.id, year: y, month: m, amount, dueDay: due });
+      created++;
+    };
+
+    if (r.billingMode === "ANCHORED") {
+      const anchorDay = Math.min(admission.getDate(), 28);
+      for (let k = 0; ; k++) {
+        const cs = new Date(admission.getFullYear(), admission.getMonth() + k, 1);
+        if (!started(cs.getFullYear(), cs.getMonth())) break;
+        await ensure(cs.getFullYear(), cs.getMonth() + 1, rent, anchorDay);
       }
-      cursor.setMonth(cursor.getMonth() + 1);
+    } else {
+      const firstY = admission.getFullYear();
+      const firstM = admission.getMonth() + 1;
+      const cursor = new Date(firstY, firstM - 1, 1);
+      while (started(cursor.getFullYear(), cursor.getMonth())) {
+        const y = cursor.getFullYear();
+        const m = cursor.getMonth() + 1;
+        const isFirst = y === firstY && m === firstM;
+        const amount = isFirst && r.proratedFirst ? proratedFirstAmount(admission, rent) : rent;
+        await ensure(y, m, amount, dueDay);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
     }
   }
   return created;

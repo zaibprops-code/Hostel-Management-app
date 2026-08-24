@@ -85,7 +85,7 @@ router.get(
       data: residents.map((r) => {
         const cycle = r.occupantType === "DAILY"
           ? null
-          : rentCycle(r.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), r.hostel.rentDueDay);
+          : rentCycle(r.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), r.billingDay ?? r.hostel.rentDueDay);
         return {
         id: r.id,
         fullName: r.fullName,
@@ -141,7 +141,7 @@ router.get(
     const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
     const cycle = resident.occupantType === "DAILY"
       ? null
-      : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), resident.hostel.rentDueDay);
+      : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), resident.billingDay ?? resident.hostel.rentDueDay);
 
     res.json({
       ...resident,

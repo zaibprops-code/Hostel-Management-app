@@ -490,6 +490,14 @@ model Resident {
   dailyRate     Decimal?       @db.Decimal(12, 2) // for DAILY occupants (whole room / night)
   guests        Int?           // number of people in a daily room booking
   contractMonths Int?
+  // Rent scheduling for monthly occupants.
+  //   CALENDAR = calendar-month cycles (Aug, Sep…) due on `billingDay`.
+  //   ANCHORED = a personal monthly cycle on the join day (12th → 12th → 12th).
+  billingMode   String   @default("CALENDAR")
+  // Day of month rent is due (1–28). Null → fall back to the hostel's rentDueDay.
+  billingDay    Int?
+  // True when the first charge was pro-rated to the days actually stayed.
+  proratedFirst Boolean  @default(false)
   foodPlanId    String?
   status        ResidentStatus @default(ACTIVE)
   // True when the record came from the public self-intake form and the owner

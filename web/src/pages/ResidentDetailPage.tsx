@@ -322,7 +322,12 @@ export default function ResidentDetailPage() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="font-semibold text-slate-800">Rent cycle</h3>
-                  <p className="text-xs text-slate-400">Rent is collected 1st–{r.rentCycle.dueDay} of each month.</p>
+                  <p className="text-xs text-slate-400">
+                    {r.billingMode === "ANCHORED"
+                      ? `Billed every month on day ${r.rentCycle.dueDay} (their join day).`
+                      : `Calendar month — rent due by day ${r.rentCycle.dueDay}.`}
+                    {r.proratedFirst ? " First month was pro-rated." : ""}
+                  </p>
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${{ PAID: "bg-emerald-100 text-emerald-700", DUE: "bg-amber-100 text-amber-700", OVERDUE: "bg-rose-100 text-rose-700" }[r.rentCycle.status as string]}`}>
                   {{ PAID: "Paid up", DUE: "Due this month", OVERDUE: "Overdue" }[r.rentCycle.status as string]}
