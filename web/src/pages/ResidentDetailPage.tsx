@@ -153,7 +153,7 @@ export default function ResidentDetailPage() {
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
-  function openAdjust(c: any) { setAdjForm({ amount: c.amount, note: c.notes || "" }); setError(""); setAdjust(c); }
+  function openAdjust(c: any) { setAdjForm({ amount: c.amount, note: c.notes || "", excessTo: "deposit" }); setError(""); setAdjust(c); }
   async function saveAdjust(payload: any) {
     setSaving(true); setError("");
     try { await api.post(`/residents/${id}/charges/${adjust.id}/adjust`, payload); setAdjust(null); await refetch(); toast.success("Charge updated."); }
@@ -606,8 +606,8 @@ export default function ResidentDetailPage() {
         <div className="space-y-3">
           <MoneyInput label="Agreed monthly rent" value={termsForm.monthlyRent} onChange={(n) => setTermsForm({ ...termsForm, monthlyRent: n })} />
           <Select label="Rent cycle" value={termsForm.billingMode} onChange={(e) => setTermsForm({ ...termsForm, billingMode: e.target.value })}>
+            <option value="CALENDAR">Calendar month (due by the hostel's rent day)</option>
             <option value="ANCHORED">Every month on the join day</option>
-            <option value="CALENDAR">Calendar month</option>
           </Select>
           <Input label="Rent due day of month (optional)" type="number" min={1} max={28} value={termsForm.billingDay}
             onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })} placeholder="Falls back to the hostel's day" />
@@ -626,15 +626,19 @@ export default function ResidentDetailPage() {
               <div className="flex justify-between"><span className="text-slate-500">Paid so far</span><span className="font-medium">{formatPKR(adjust.amountPaid)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Balance</span><span className="font-medium text-rose-600">{formatPKR(adjust.balance)}</span></div>
             </div>
+            <Select label="If they overpaid, move the extra to" value={adjForm.excessTo} onChange={(e) => setAdjForm({ ...adjForm, excessTo: e.target.value })}>
+              <option value="deposit">Security deposit (next month still billed in full)</option>
+              <option value="credit">Advance credit (reduces next month's rent)</option>
+            </Select>
             <div className="flex flex-wrap gap-2">
               {r.admissionDate && adjust.periodMonth === new Date(r.admissionDate).getMonth() + 1 && adjust.periodYear === new Date(r.admissionDate).getFullYear() && (
-                <button type="button" onClick={() => saveAdjust({ prorate: true, note: "Pro-rated to join date" })}
+                <button type="button" onClick={() => saveAdjust({ prorate: true, excessTo: adjForm.excessTo, note: adjForm.note || "Pro-rated to join date" })}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-brand-400 hover:text-brand-600">
                   Pro-rate to join date ({new Date(r.admissionDate).getDate()}th)
                 </button>
               )}
               {adjust.balance > 0 && (
-                <button type="button" onClick={() => saveAdjust({ waive: true, note: "Balance waived" })}
+                <button type="button" onClick={() => saveAdjust({ waive: true, note: adjForm.note || "Balance waived" })}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-rose-300 hover:text-rose-600">
                   Waive the {formatPKR(adjust.balance)} balance
                 </button>
@@ -642,9 +646,13 @@ export default function ResidentDetailPage() {
             </div>
             <MoneyInput label="Set charge amount" value={adjForm.amount} onChange={(n) => setAdjForm({ ...adjForm, amount: n })} />
             <Input label="Note (optional)" value={adjForm.note} onChange={(e) => setAdjForm({ ...adjForm, note: e.target.value })} placeholder="Why it was changed" />
-            <p className="text-xs text-slate-400">If more was already paid than the new amount, the extra becomes advance credit and applies to upcoming months.</p>
+            <p className="text-xs text-slate-400">
+              {adjForm.excessTo === "deposit"
+                ? "Anything paid above the new amount is held as security deposit; upcoming months are billed in full."
+                : "Anything paid above the new amount becomes advance credit and reduces upcoming months."}
+            </p>
             <ErrorText>{error}</ErrorText>
-            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setAdjust(null)}>Cancel</Button><Button loading={saving} onClick={() => saveAdjust({ amount: adjForm.amount, note: adjForm.note || undefined })}>Save</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setAdjust(null)}>Cancel</Button><Button loading={saving} onClick={() => saveAdjust({ amount: adjForm.amount, excessTo: adjForm.excessTo, note: adjForm.note || undefined })}>Save</Button></div>
           </div>
         )}
       </Modal>
@@ -727,8 +735,8 @@ export default function ResidentDetailPage() {
                 <MoneyInput label="Security deposit" value={admitForm.depositAmount} onChange={(n) => setAdmitForm({ ...admitForm, depositAmount: n })} />
               </div>
               <Select label="Rent cycle" value={admitForm.billingMode} onChange={(e) => setAdmitForm({ ...admitForm, billingMode: e.target.value })}>
+                <option value="CALENDAR">Calendar month (due by the hostel's rent day)</option>
                 <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
-                <option value="CALENDAR">Calendar month</option>
               </Select>
               {admitForm.billingMode === "CALENDAR" && (
                 <Select label="First charge" value={admitForm.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setAdmitForm({ ...admitForm, proratedFirst: e.target.value === "PRO" })}>

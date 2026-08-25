@@ -284,10 +284,42 @@ router.post(
   })
 );
 
+// Move `amount` of a resident's unallocated payment credit into their security
+// deposit: tie that money to non-rent allocations (so it stops counting as rent
+// advance) and record it on the deposit ledger. Used when an overpaid month is
+// pro-rated and the extra should be held as deposit rather than credited ahead.
+async function moveCreditToDeposit(tx: any, resident: { id: string; hostelId: string }, amount: number): Promise<void> {
+  if (amount <= 0.001) return;
+  const payments = await tx.payment.findMany({
+    where: { residentId: resident.id, status: "COMPLETED" },
+    orderBy: { paidAt: "asc" },
+    include: { allocations: true },
+  });
+  let remaining = amount;
+  for (const p of payments) {
+    if (remaining <= 0.001) break;
+    const avail = Number(p.amount) - p.allocations.reduce((s: number, a: any) => s + Number(a.amount), 0);
+    if (avail <= 0.001) continue;
+    const take = Math.min(avail, remaining);
+    // A null rentChargeId allocation = money applied to something other than rent.
+    await tx.paymentAllocation.create({ data: { paymentId: p.id, rentChargeId: null, amount: take } });
+    remaining -= take;
+  }
+  const moved = amount - remaining;
+  if (moved <= 0.001) return;
+  const existing = await tx.securityDeposit.findUnique({ where: { residentId: resident.id } });
+  const dep = existing
+    ? await tx.securityDeposit.update({ where: { id: existing.id }, data: { amount: dec(existing.amount) + moved, status: "HELD" } })
+    : await tx.securityDeposit.create({ data: { hostelId: resident.hostelId, residentId: resident.id, amount: moved, method: "CASH", status: "HELD" } });
+  await tx.depositTransaction.create({ data: { depositId: dep.id, type: "DEPOSIT", amount: moved, reason: "Converted from overpaid rent" } });
+}
+
 // POST /api/residents/:id/charges/:chargeId/adjust — make a single month's rent
 // flexible: change its amount (e.g. pro-rate the join month), apply a discount,
 // or waive the balance. If a payment was already over-applied to this charge,
-// the excess is freed back to the resident's advance credit and swept forward.
+// the freed excess goes where `excessTo` says: to the SECURITY DEPOSIT (default)
+// so next month is still billed in full, or kept as advance credit against the
+// coming months.
 router.post(
   "/:id/charges/:chargeId/adjust",
   requirePermission("payments.manage"),
@@ -296,6 +328,7 @@ router.post(
     discount: z.coerce.number().min(0).optional(),
     waive: z.coerce.boolean().optional(),   // set discount so the net becomes 0
     prorate: z.coerce.boolean().optional(), // recompute amount pro-rata to join date
+    excessTo: z.enum(["deposit", "credit"]).default("deposit"),
     note: z.string().optional(),
   })),
   asyncHandler(async (req, res) => {
@@ -343,8 +376,15 @@ router.post(
           notes: req.body.note ?? charge.notes,
         },
       });
-      // Push any freed credit onto the next unpaid months.
-      await applyResidentAdvances(tx, resident.id);
+      const freed = Math.max(0, dec(charge.amountPaid) - paid);
+      if (freed > 0.001 && req.body.excessTo !== "credit") {
+        // Overpaid rent turns into security deposit — next month stays billable
+        // in full (the resident does not get a rent discount for paying early).
+        await moveCreditToDeposit(tx, resident, freed);
+      } else {
+        // Keep it as advance credit against the coming months.
+        await applyResidentAdvances(tx, resident.id);
+      }
     });
 
     await audit({ userId: req.auth!.id, action: "rentcharge.adjust", entity: "RentCharge", entityId: charge.id, hostelId: resident.hostelId, oldValue: { amount: dec(charge.amount), discount: dec(charge.discount) }, newValue: { amount, discount } });

@@ -20,7 +20,7 @@ const hostelSchema = z.object({
   propertyRent: z.coerce.number().min(0).default(0),
   propertyDeposit: z.coerce.number().min(0).default(0),
   noticePeriodDays: z.coerce.number().int().min(0).default(30),
-  rentDueDay: z.coerce.number().int().min(1).max(28).default(10),
+  rentDueDay: z.coerce.number().int().min(1).max(28).default(5),
 });
 
 // GET /api/hostels — list accessible hostels with live occupancy stats.

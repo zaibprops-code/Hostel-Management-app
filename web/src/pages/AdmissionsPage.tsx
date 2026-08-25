@@ -375,8 +375,8 @@ export default function AdmissionsPage() {
                   <NumberInput label="Contract (months)" value={form.contractMonths} onChange={(n) => setForm({ ...form, contractMonths: n })} />
 
                   <Select label="Rent cycle" value={form.billingMode} onChange={(e) => setForm({ ...form, billingMode: e.target.value })}>
-                    <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
                     <option value="CALENDAR">Calendar month (1st–{form.rentDueDay || "10"}th)</option>
+                    <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
                   </Select>
                   {form.billingMode === "CALENDAR" && (
                     <Select label="First charge" value={form.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setForm({ ...form, proratedFirst: e.target.value === "PRO" })}>

@@ -10,7 +10,7 @@ import { formatPKR } from "../lib/format";
 import { qrSvg } from "../lib/qr";
 import { IconHostel, IconPlus } from "../components/icons";
 
-const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 10, contactNumber: "", address: "" };
+const BLANK = { name: "", code: "", city: "Islamabad", gender: "MALE", propertyRent: 0, propertyDeposit: 0, noticePeriodDays: 30, rentDueDay: 5, contactNumber: "", address: "" };
 
 export default function HostelsPage() {
   const { can } = useAuth();
