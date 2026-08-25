@@ -153,8 +153,59 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
         cursor.setMonth(cursor.getMonth() + 1);
       }
     }
+
+    // Sweep any advance credit (money paid but not yet tied to a charge) onto
+    // the resident's oldest unpaid months — so an overpayment or a pro-rated
+    // join month automatically reduces what's due next.
+    await applyResidentAdvances(prisma, r.id);
   }
   return created;
+}
+
+// Apply a resident's unallocated payment credit ("advance") to their oldest
+// unpaid rent charges. Money a resident paid beyond what was owed at the time
+// (e.g. they paid a full month but the join month was pro-rated) waits as credit
+// on the payment and is pulled forward here. Idempotent: once every payment's
+// amount is fully allocated, re-running does nothing.
+export async function applyResidentAdvances(db: Tx, residentId: string): Promise<void> {
+  const payments = await db.payment.findMany({
+    where: { residentId, status: "COMPLETED" },
+    orderBy: { paidAt: "asc" },
+    include: { allocations: true },
+  });
+  const pools = payments
+    .map((p) => ({ id: p.id, avail: Number(p.amount) - p.allocations.reduce((s, a) => s + Number(a.amount), 0) }))
+    .filter((p) => p.avail > 0.001);
+  if (!pools.length) return;
+
+  const charges = await db.rentCharge.findMany({
+    where: { residentId, status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] } },
+    orderBy: [{ periodYear: "asc" }, { periodMonth: "asc" }],
+  });
+
+  let pi = 0;
+  for (const c of charges) {
+    let need = Number(c.amount) - Number(c.discount) - Number(c.amountPaid);
+    if (need <= 0.001) continue;
+    let applied = 0;
+    while (need > 0.001 && pi < pools.length) {
+      const pool = pools[pi];
+      if (pool.avail <= 0.001) { pi++; continue; }
+      const take = Math.min(need, pool.avail);
+      await db.paymentAllocation.create({ data: { paymentId: pool.id, rentChargeId: c.id, amount: take } });
+      pool.avail -= take;
+      need -= take;
+      applied += take;
+    }
+    if (applied > 0) {
+      const newPaid = Number(c.amountPaid) + applied;
+      await db.rentCharge.update({
+        where: { id: c.id },
+        data: { amountPaid: newPaid, status: computeStatus(Number(c.amount), Number(c.discount), newPaid, c.dueDate) },
+      });
+    }
+    if (pi >= pools.length) break;
+  }
 }
 
 // Generate this month's rent charges lazily on read, at most once per hostel per

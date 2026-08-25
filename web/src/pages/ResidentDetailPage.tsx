@@ -37,6 +37,12 @@ export default function ResidentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [payForm, setPayForm] = useState<any>({ amount: 0, method: "CASH", reference: "", paidAt: new Date().toISOString().slice(0, 10), chargeId: "" });
   const [payProof, setPayProof] = useState<File | null>(null);
+  const [deposit, setDeposit] = useState(false);
+  const [depForm, setDepForm] = useState<any>({ amount: 0, method: "CASH" });
+  const [terms, setTerms] = useState(false);
+  const [termsForm, setTermsForm] = useState<any>({ monthlyRent: 0, billingMode: "CALENDAR", billingDay: "" });
+  const [adjust, setAdjust] = useState<null | any>(null);
+  const [adjForm, setAdjForm] = useState<any>({ amount: 0, note: "" });
   const [coForm, setCoForm] = useState<any>({ checkoutDate: new Date().toISOString().slice(0, 10), damageCharges: 0, otherCharges: 0, inspectionNotes: "" });
   const [portal, setPortal] = useState(false);
   const [portalForm, setPortalForm] = useState<any>({ email: "", password: "" });
@@ -122,6 +128,36 @@ export default function ResidentDetailPage() {
     if (!file) return;
     try { await uploadFile({ scope: "payment.proof", paymentId, file: await compressDocument(file) }); await refetch(); toast.success("Receipt attached."); }
     catch (e) { toast.error(apiError(e)); }
+  }
+
+  function openDeposit() { setDepForm({ amount: 0, method: "CASH" }); setError(""); setDeposit(true); }
+  async function recordDeposit() {
+    setSaving(true); setError("");
+    try { await api.post(`/residents/${id}/deposit`, depForm); setDeposit(false); await refetch(); toast.success("Security deposit recorded."); }
+    catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+
+  function openTerms() {
+    setTermsForm({ monthlyRent: r.monthlyRent, billingMode: r.billingMode || "CALENDAR", billingDay: r.billingDay ?? "" });
+    setError(""); setTerms(true);
+  }
+  async function saveTerms() {
+    setSaving(true); setError("");
+    try {
+      await api.patch(`/residents/${id}/billing`, {
+        monthlyRent: termsForm.monthlyRent,
+        billingMode: termsForm.billingMode,
+        billingDay: termsForm.billingDay === "" ? null : Number(termsForm.billingDay),
+      });
+      setTerms(false); await refetch(); toast.success("Rent terms updated.");
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+
+  function openAdjust(c: any) { setAdjForm({ amount: c.amount, note: c.notes || "" }); setError(""); setAdjust(c); }
+  async function saveAdjust(payload: any) {
+    setSaving(true); setError("");
+    try { await api.post(`/residents/${id}/charges/${adjust.id}/adjust`, payload); setAdjust(null); await refetch(); toast.success("Charge updated."); }
+    catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function giveNotice() {
     setSaving(true); setError("");
@@ -221,6 +257,8 @@ export default function ResidentDetailPage() {
                 canShareFiles() ? { label: "📤 Share Form", onClick: () => exportForm("share"), disabled: !!exporting } : null,
                 { label: "📑 Full Profile PDF", onClick: () => exportProfile("save"), disabled: !!exporting },
                 canShareFiles() ? { label: "📤 Share Profile", onClick: () => exportProfile("share"), disabled: !!exporting } : null,
+                (can("residents.manage") && r.occupantType !== "DAILY") ? { label: "✏️ Edit rent terms", onClick: openTerms } : null,
+                (can("payments.manage") && active) ? { label: "🛡 Record deposit", onClick: openDeposit } : null,
                 (can("residents.manage") && r.status === "ACTIVE") ? { label: "🔔 Give Notice", onClick: () => setNotice(true) } : null,
                 (can("residents.manage") && !r.userId) ? { label: "🔑 Create Portal Login", onClick: () => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); } } : null,
                 (can("residents.manage") && active) ? { label: "🚪 Checkout", onClick: () => setCheckout(true) } : null,
@@ -336,8 +374,26 @@ export default function ResidentDetailPage() {
         <div className="lg:col-span-2 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Card className="p-4"><p className="text-xs text-slate-400">Outstanding</p><p className="text-xl font-bold text-rose-600">{formatPKR(r.outstanding)}</p></Card>
-            <Card className="p-4"><p className="text-xs text-slate-400">Deposit Held</p><p className="text-xl font-bold text-slate-800">{formatPKR(r.deposit?.amount ?? 0)}</p></Card>
-            <Card className="p-4"><p className="text-xs text-slate-400">Monthly Rent</p><p className="text-xl font-bold text-slate-800">{formatPKR(r.monthlyRent)}</p></Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400">Deposit Held</p>
+                {can("payments.manage") && active && <button onClick={openDeposit} className="text-xs font-medium text-brand-600">{r.deposit?.amount ? "＋" : "Record"}</button>}
+              </div>
+              <p className="text-xl font-bold text-slate-800">{formatPKR(r.deposit?.amount ?? 0)}</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400">Monthly Rent</p>
+                {can("residents.manage") && <button onClick={openTerms} className="text-xs font-medium text-brand-600">Edit</button>}
+              </div>
+              <p className="text-xl font-bold text-slate-800">{formatPKR(r.monthlyRent)}</p>
+            </Card>
+            {r.advanceCredit > 0 && (
+              <Card className="p-4 border-emerald-100 bg-emerald-50/40 sm:col-span-3">
+                <p className="text-xs text-emerald-700">Advance credit (paid ahead) — applies to upcoming rent automatically</p>
+                <p className="text-xl font-bold text-emerald-600">{formatPKR(r.advanceCredit)}</p>
+              </Card>
+            )}
           </div>
 
           {r.rentCycle && (
@@ -391,8 +447,11 @@ export default function ResidentDetailPage() {
                           <StatusBadge status={c.status} />
                           {c.balance > 0 && <p className="text-xs text-rose-600 font-medium mt-1">{formatPKR(c.balance)} due</p>}
                         </div>
-                        {c.balance > 0 && can("payments.manage") && active && (
-                          <button onClick={() => openPay(c.id)} className="text-brand-600 text-sm font-medium">Pay</button>
+                        {can("payments.manage") && (
+                          <div className="flex flex-col items-end gap-1">
+                            {c.balance > 0 && active && <button onClick={() => openPay(c.id)} className="text-brand-600 text-sm font-medium">Pay</button>}
+                            <button onClick={() => openAdjust(c)} className="text-slate-400 text-xs font-medium">Adjust</button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -409,8 +468,11 @@ export default function ResidentDetailPage() {
                           <td>{formatPKR(c.amount)}</td><td>{formatPKR(c.amountPaid)}</td>
                           <td className={c.balance > 0 ? "text-rose-600 font-medium" : ""}>{formatPKR(c.balance)}</td>
                           <td><StatusBadge status={c.status} /></td>
-                          <td className="text-right">{c.balance > 0 && can("payments.manage") && active && (
-                            <button onClick={() => openPay(c.id)} className="text-brand-600 font-medium hover:underline">Pay</button>
+                          <td className="text-right">{can("payments.manage") && (
+                            <span className="inline-flex gap-3">
+                              {c.balance > 0 && active && <button onClick={() => openPay(c.id)} className="text-brand-600 font-medium hover:underline">Pay</button>}
+                              <button onClick={() => openAdjust(c)} className="text-slate-400 hover:text-slate-600 hover:underline">Adjust</button>
+                            </span>
                           )}</td>
                         </tr>
                       ))}
@@ -523,6 +585,68 @@ export default function ResidentDetailPage() {
         </div>
           );
         })()}
+      </Modal>
+
+      {/* Record security deposit */}
+      <Modal open={deposit} onClose={() => setDeposit(false)} title="Record Security Deposit">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Record the security / advance deposit {r.fullName} paid. Currently held: <b className="text-slate-700">{formatPKR(r.deposit?.amount ?? 0)}</b>.</p>
+          <MoneyInput label="Deposit amount" value={depForm.amount} onChange={(n) => setDepForm({ ...depForm, amount: n })} />
+          <Select label="Method" value={depForm.method} onChange={(e) => setDepForm({ ...depForm, method: e.target.value })}>
+            {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
+          </Select>
+          <p className="text-xs text-slate-400">Deposits are held separately from rent and refunded (minus any deductions) at checkout.</p>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDeposit(false)}>Cancel</Button><Button loading={saving} disabled={!depForm.amount} onClick={recordDeposit}>Save Deposit</Button></div>
+        </div>
+      </Modal>
+
+      {/* Edit rent terms */}
+      <Modal open={terms} onClose={() => setTerms(false)} title="Edit Rent Terms">
+        <div className="space-y-3">
+          <MoneyInput label="Agreed monthly rent" value={termsForm.monthlyRent} onChange={(n) => setTermsForm({ ...termsForm, monthlyRent: n })} />
+          <Select label="Rent cycle" value={termsForm.billingMode} onChange={(e) => setTermsForm({ ...termsForm, billingMode: e.target.value })}>
+            <option value="ANCHORED">Every month on the join day</option>
+            <option value="CALENDAR">Calendar month</option>
+          </Select>
+          <Input label="Rent due day of month (optional)" type="number" min={1} max={28} value={termsForm.billingDay}
+            onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })} placeholder="Falls back to the hostel's day" />
+          <p className="text-xs text-slate-400">New rent applies to future months. To change a month already charged, use <b>Adjust</b> on that row.</p>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setTerms(false)}>Cancel</Button><Button loading={saving} onClick={saveTerms}>Save</Button></div>
+        </div>
+      </Modal>
+
+      {/* Adjust a month's rent charge */}
+      <Modal open={!!adjust} onClose={() => setAdjust(null)} title={adjust ? `Adjust rent — ${adjust.periodMonth}/${adjust.periodYear}` : ""}>
+        {adjust && (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-slate-500">Charged</span><span className="font-medium">{formatPKR(adjust.amount)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Paid so far</span><span className="font-medium">{formatPKR(adjust.amountPaid)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Balance</span><span className="font-medium text-rose-600">{formatPKR(adjust.balance)}</span></div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {r.admissionDate && adjust.periodMonth === new Date(r.admissionDate).getMonth() + 1 && adjust.periodYear === new Date(r.admissionDate).getFullYear() && (
+                <button type="button" onClick={() => saveAdjust({ prorate: true, note: "Pro-rated to join date" })}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-brand-400 hover:text-brand-600">
+                  Pro-rate to join date ({new Date(r.admissionDate).getDate()}th)
+                </button>
+              )}
+              {adjust.balance > 0 && (
+                <button type="button" onClick={() => saveAdjust({ waive: true, note: "Balance waived" })}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-rose-300 hover:text-rose-600">
+                  Waive the {formatPKR(adjust.balance)} balance
+                </button>
+              )}
+            </div>
+            <MoneyInput label="Set charge amount" value={adjForm.amount} onChange={(n) => setAdjForm({ ...adjForm, amount: n })} />
+            <Input label="Note (optional)" value={adjForm.note} onChange={(e) => setAdjForm({ ...adjForm, note: e.target.value })} placeholder="Why it was changed" />
+            <p className="text-xs text-slate-400">If more was already paid than the new amount, the extra becomes advance credit and applies to upcoming months.</p>
+            <ErrorText>{error}</ErrorText>
+            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setAdjust(null)}>Cancel</Button><Button loading={saving} onClick={() => saveAdjust({ amount: adjForm.amount, note: adjForm.note || undefined })}>Save</Button></div>
+          </div>
+        )}
       </Modal>
 
       {/* Portal login modal */}

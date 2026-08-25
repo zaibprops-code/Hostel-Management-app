@@ -6,7 +6,7 @@ import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
-import { catchUpRent, rentCycle } from "../lib/rent";
+import { catchUpRent, rentCycle, computeStatus, proratedFirstAmount, applyResidentAdvances } from "../lib/rent";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -139,6 +139,15 @@ router.get(
       0
     );
     const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
+
+    // Advance credit = money paid but not yet tied to any charge (an overpayment
+    // or the leftover from a pro-rated join month) — it will settle future rent.
+    const [paidAgg, allocAgg] = await Promise.all([
+      prisma.payment.aggregate({ where: { residentId: resident.id, status: "COMPLETED" }, _sum: { amount: true } }),
+      prisma.paymentAllocation.aggregate({ where: { payment: { residentId: resident.id, status: "COMPLETED" } }, _sum: { amount: true } }),
+    ]);
+    const advanceCredit = Math.max(0, dec(paidAgg._sum.amount) - dec(allocAgg._sum.amount));
+
     const cycle = resident.occupantType === "DAILY"
       ? null
       : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), resident.billingDay ?? resident.hostel.rentDueDay);
@@ -148,6 +157,7 @@ router.get(
       monthlyRent: dec(resident.monthlyRent),
       dailyRate: dec(resident.dailyRate),
       outstanding: Math.max(0, outstanding),
+      advanceCredit,
       rentCycle: cycle,
       deposit: resident.deposit
         ? {
@@ -215,6 +225,130 @@ router.patch(
     const resident = await prisma.resident.update({ where: { id: before.id }, data: { status: req.body.status } });
     await audit({ userId: req.auth!.id, action: "resident.status", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, oldValue: { status: before.status }, newValue: { status: req.body.status } });
     res.json(resident);
+  })
+);
+
+// PATCH /api/residents/:id/billing — edit the agreed rent terms after admission
+// (monthly rent, cycle mode, billing day). Existing charges are left as they
+// are — adjust a specific month with the charge-adjust route if needed; only
+// future months pick up the new rent.
+router.patch(
+  "/:id/billing",
+  requirePermission("residents.manage"),
+  validateBody(z.object({
+    monthlyRent: z.coerce.number().min(0).optional(),
+    billingMode: z.enum(["CALENDAR", "ANCHORED"]).optional(),
+    billingDay: z.coerce.number().int().min(1).max(28).nullable().optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!before) throw notFound("Resident not found");
+    await assertHostelAccess(req, before.hostelId);
+    const data: Record<string, unknown> = {};
+    if (req.body.monthlyRent != null) data.monthlyRent = req.body.monthlyRent;
+    if (req.body.billingMode) data.billingMode = req.body.billingMode;
+    if (req.body.billingDay !== undefined) data.billingDay = req.body.billingDay;
+    const resident = await prisma.resident.update({ where: { id: before.id }, data });
+    await audit({ userId: req.auth!.id, action: "resident.billing", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, newValue: data });
+    res.json({ id: resident.id, monthlyRent: dec(resident.monthlyRent), billingMode: resident.billingMode, billingDay: resident.billingDay });
+  })
+);
+
+// POST /api/residents/:id/deposit — record (or top up) the security deposit a
+// resident pays, possibly after admission. Upserts the single deposit record
+// and logs a DEPOSIT transaction.
+router.post(
+  "/:id/deposit",
+  requirePermission("payments.manage"),
+  validateBody(z.object({
+    amount: z.coerce.number().positive(),
+    method: z.enum(["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"]).default("CASH"),
+    reason: z.string().optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    const { amount, method, reason } = req.body;
+
+    const deposit = await prisma.$transaction(async (tx) => {
+      const existing = await tx.securityDeposit.findUnique({ where: { residentId: resident.id } });
+      const dep = existing
+        ? await tx.securityDeposit.update({ where: { id: existing.id }, data: { amount: dec(existing.amount) + amount, status: "HELD", method } })
+        : await tx.securityDeposit.create({ data: { hostelId: resident.hostelId, residentId: resident.id, amount, method, status: "HELD" } });
+      await tx.depositTransaction.create({ data: { depositId: dep.id, type: "DEPOSIT", amount, reason: reason || "Security deposit received" } });
+      return dep;
+    });
+    await audit({ userId: req.auth!.id, action: "deposit.record", entity: "SecurityDeposit", entityId: deposit.id, hostelId: resident.hostelId, newValue: { amount } });
+    res.status(201).json({ id: deposit.id, amount: dec(deposit.amount) });
+  })
+);
+
+// POST /api/residents/:id/charges/:chargeId/adjust — make a single month's rent
+// flexible: change its amount (e.g. pro-rate the join month), apply a discount,
+// or waive the balance. If a payment was already over-applied to this charge,
+// the excess is freed back to the resident's advance credit and swept forward.
+router.post(
+  "/:id/charges/:chargeId/adjust",
+  requirePermission("payments.manage"),
+  validateBody(z.object({
+    amount: z.coerce.number().min(0).optional(),
+    discount: z.coerce.number().min(0).optional(),
+    waive: z.coerce.boolean().optional(),   // set discount so the net becomes 0
+    prorate: z.coerce.boolean().optional(), // recompute amount pro-rata to join date
+    note: z.string().optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    const charge = await prisma.rentCharge.findUnique({ where: { id: req.params.chargeId }, include: { allocations: true } });
+    if (!charge || charge.residentId !== resident.id) throw notFound("Charge not found");
+
+    let amount = req.body.amount != null ? req.body.amount : dec(charge.amount);
+    if (req.body.prorate && resident.admissionDate) {
+      amount = proratedFirstAmount(resident.admissionDate, dec(resident.monthlyRent));
+    }
+    let discount = req.body.discount != null ? req.body.discount : dec(charge.discount);
+    // Waive = forgive only the still-outstanding balance: discount down to what
+    // has already been paid (so a part-paid month settles, a fully-unpaid month
+    // becomes a zero-net waiver).
+    if (req.body.waive) discount = Math.max(0, amount - dec(charge.amountPaid));
+
+    const net = Math.max(0, amount - discount);
+
+    await prisma.$transaction(async (tx) => {
+      // If more is already allocated to this charge than the new net, free the
+      // excess by trimming allocations (newest first) back into advance credit.
+      let paid = dec(charge.amountPaid);
+      if (paid > net) {
+        let excess = paid - net;
+        const allocs = [...charge.allocations].sort((a, b) => b.id.localeCompare(a.id));
+        for (const a of allocs) {
+          if (excess <= 0.001) break;
+          const amt = dec(a.amount);
+          const cut = Math.min(amt, excess);
+          if (cut >= amt - 0.001) await tx.paymentAllocation.delete({ where: { id: a.id } });
+          else await tx.paymentAllocation.update({ where: { id: a.id }, data: { amount: amt - cut } });
+          excess -= cut;
+          paid -= cut;
+        }
+      }
+      const waived = discount > 0 && net <= 0.001 && paid <= 0.001;
+      await tx.rentCharge.update({
+        where: { id: charge.id },
+        data: {
+          amount, discount, amountPaid: paid,
+          status: waived ? "WAIVED" : computeStatus(amount, discount, paid, charge.dueDate),
+          notes: req.body.note ?? charge.notes,
+        },
+      });
+      // Push any freed credit onto the next unpaid months.
+      await applyResidentAdvances(tx, resident.id);
+    });
+
+    await audit({ userId: req.auth!.id, action: "rentcharge.adjust", entity: "RentCharge", entityId: charge.id, hostelId: resident.hostelId, oldValue: { amount: dec(charge.amount), discount: dec(charge.discount) }, newValue: { amount, discount } });
+    res.json({ success: true });
   })
 );
 
