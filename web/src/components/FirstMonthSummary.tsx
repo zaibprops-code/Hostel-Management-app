@@ -1,5 +1,5 @@
 import { formatPKR, formatDate } from "../lib/format";
-import { FirstMonthPlan, formatPerDay, ordinal } from "../lib/rent";
+import { FirstMonthPlan, formatPerDay, ordinal, dueWindow } from "../lib/rent";
 
 // Live preview of a new resident's first rent charge: the pro-rata breakdown
 // (or full month), when it falls due, and what follows each month.
@@ -27,7 +27,7 @@ export function FirstMonthSummary({ plan, monthlyRent, billingMode, dueDay }: { 
       <p className="text-xs text-slate-500 border-t border-brand-100 pt-1.5">
         {billingMode === "ANCHORED"
           ? `Then ${formatPKR(rent)} every month on the ${ordinal(plan.fromDay)}.`
-          : `Then ${formatPKR(rent)} every month, due by the ${ordinal(Math.min(dueDay, 28))}.`}
+          : `Then ${formatPKR(rent)} every month, due ${dueWindow(dueDay)} of the month.`}
       </p>
     </div>
   );

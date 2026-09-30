@@ -5,7 +5,7 @@ import { asyncHandler, badRequest, conflict, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
-import { ensureRentCharge, firstChargeAmount, firstChargeDueDate, proRataNote } from "../lib/rent";
+import { ensureRentCharge, firstChargeAmount, firstChargeDueDate, proRataNote, generateDueRent } from "../lib/rent";
 import { nextReceiptNo } from "../lib/receipts";
 import { dec } from "../lib/query";
 
@@ -98,8 +98,8 @@ router.post(
     if (!hostelId) throw badRequest("Select a hostel, or a bed/room to assign");
     await assertHostelAccess(req, hostelId);
 
-    // Rent for monthly occupants is due by the hostel's configured day (e.g. 10th).
-    const rentDueDay = (await prisma.hostel.findUnique({ where: { id: hostelId }, select: { rentDueDay: true } }))?.rentDueDay ?? 10;
+    // Rent for monthly occupants is due by the hostel's configured day (e.g. 1st–5th).
+    const rentDueDay = (await prisma.hostel.findUnique({ where: { id: hostelId }, select: { rentDueDay: true } }))?.rentDueDay ?? 5;
 
     // Billing: monthly rent for long-term; (daily rate × nights) once for daily.
     const nights = Math.max(1, body.nights || 1);
@@ -233,6 +233,10 @@ router.post(
 
       return { admission, residentId };
     });
+
+    // A back-dated admission owes every month since joining — create those
+    // charges now rather than waiting for the next monthly rent run.
+    if (result.admission && !isDaily) await generateDueRent(prisma, undefined, [result.residentId]);
 
     await audit({
       userId: req.auth!.id,

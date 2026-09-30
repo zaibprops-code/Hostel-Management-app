@@ -7,6 +7,7 @@ import { usePrompt } from "../context/PromptContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
+import { dueWindow } from "../lib/rent";
 import { qrSvg } from "../lib/qr";
 import { IconHostel, IconPlus } from "../components/icons";
 
@@ -40,7 +41,7 @@ export default function HostelsPage() {
     setForm({
       name: h.name ?? "", code: h.code ?? "", city: h.city ?? "", gender: h.gender ?? "MALE",
       propertyRent: h.propertyRent ?? 0, propertyDeposit: h.propertyDeposit ?? 0,
-      noticePeriodDays: h.noticePeriodDays ?? 30, rentDueDay: h.rentDueDay ?? 10,
+      noticePeriodDays: h.noticePeriodDays ?? 30, rentDueDay: h.rentDueDay ?? 5,
       contactNumber: h.contactNumber ?? "", address: h.address ?? "",
     });
     setError("");
@@ -204,7 +205,10 @@ export default function HostelsPage() {
           </Select>
           <Input label="Contact number" value={form.contactNumber} onChange={(e) => setForm({ ...form, contactNumber: e.target.value })} />
           <NumberInput label="Notice period (days)" value={form.noticePeriodDays} onChange={(n) => setForm({ ...form, noticePeriodDays: n })} />
-          <NumberInput label="Rent due by (day of month)" value={form.rentDueDay} onChange={(n) => setForm({ ...form, rentDueDay: Math.min(28, Math.max(1, n)) })} />
+          <div>
+            <NumberInput label="Rent due by (day of month)" value={form.rentDueDay} onChange={(n) => setForm({ ...form, rentDueDay: Math.min(28, Math.max(1, n)) })} />
+            <p className="mt-1 text-xs text-slate-400">Residents pay rent {dueWindow(form.rentDueDay)} of each month. Changing it moves any unpaid rent to the new day.</p>
+          </div>
           <MoneyInput label="Property rent (monthly)" value={form.propertyRent} onChange={(n) => setForm({ ...form, propertyRent: n })} />
           <MoneyInput label="Property deposit" value={form.propertyDeposit} onChange={(n) => setForm({ ...form, propertyDeposit: n })} />
           <div className="lg:col-span-2"><Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>

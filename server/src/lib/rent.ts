@@ -119,7 +119,7 @@ export function firstChargeDueDate(mode: string, admissionDate: Date, dueDay: nu
   const m0 = admissionDate.getMonth();
   const joinDay = admissionDate.getDate();
   if (mode === "ANCHORED") return endOfDay(y, m0, joinDay);
-  const day = Math.min(dueDay || 10, 28);
+  const day = Math.min(dueDay || 5, 28);
   return joinDay <= day ? endOfDay(y, m0, day) : endOfDay(y, m0 + 1, day);
 }
 
@@ -139,32 +139,44 @@ export function residentDueDay(
 ): number {
   if (r.billingDay) return Math.min(r.billingDay, 28);
   if (r.billingMode === "ANCHORED" && r.admissionDate) return Math.min(r.admissionDate.getDate(), 28);
-  return Math.min(hostelDay || 10, 28);
+  return Math.min(hostelDay || 5, 28);
 }
 
-// Generates rent charges for every active resident up to the current cycle.
-// Honours each resident's billing mode:
+// Generates rent charges for every current resident (active or serving notice)
+// up to the current cycle — including any months missed so far, e.g. after a
+// back-dated admission. Honours each resident's billing mode:
 //   • CALENDAR — one charge per calendar month (the first pro-rated if chosen),
 //     due on the resident's billing day (or the hostel's).
 //   • ANCHORED — one full charge per personal monthly cycle starting on the
 //     join day (12th → 12th → 12th …).
-// Returns the number of new charges created. Idempotent — safe to run often.
-export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]): Promise<number> {
+// Scope it to hostels and/or specific residents. Returns the number of new
+// charges created. Idempotent — safe to run often.
+export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[], residentIds?: string[]): Promise<number> {
   const now = new Date();
   const residents = await prisma.resident.findMany({
     where: {
-      status: "ACTIVE",
+      status: { in: ["ACTIVE", "NOTICE_GIVEN"] }, // billed until checkout
       admissionDate: { not: null },
       occupantType: { not: "DAILY" }, // daily guests are billed once for their stay
       ...(hostelIds ? { hostelId: { in: hostelIds } } : {}),
+      ...(residentIds ? { id: { in: residentIds } } : {}),
     },
   });
+  if (residents.length === 0) return 0;
 
   const hostelRows = await prisma.hostel.findMany({
     where: { id: { in: [...new Set(residents.map((r) => r.hostelId))] } },
     select: { id: true, rentDueDay: true },
   });
   const dueDayOf = new Map(hostelRows.map((h) => [h.id, h.rentDueDay]));
+
+  // Every existing charge for these residents, fetched once.
+  const existing = await prisma.rentCharge.findMany({
+    where: { residentId: { in: residents.map((r) => r.id) } },
+    select: { id: true, residentId: true, periodYear: true, periodMonth: true, amount: true, discount: true, amountPaid: true, dueDate: true, status: true },
+  });
+  const key = (rid: string, y: number, m: number) => `${rid}:${y}:${m}`;
+  const byPeriod = new Map(existing.map((c) => [key(c.residentId, c.periodYear, c.periodMonth), c]));
 
   // Whether cycle month (y,m) has started as of now.
   const started = (y: number, m0: number) =>
@@ -175,14 +187,11 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     const admission = r.admissionDate;
     if (!admission) continue;
     const rent = Number(r.monthlyRent);
-    const hostelDay = dueDayOf.get(r.hostelId) ?? 10;
+    const hostelDay = dueDayOf.get(r.hostelId) ?? 5;
     const dueDay = residentDueDay(r, hostelDay);
 
     const ensure = async (y: number, m: number, amount: number, due: number, extra: { dueDate?: Date; notes?: string } = {}) => {
-      const before = await prisma.rentCharge.findUnique({
-        where: { residentId_periodYear_periodMonth: { residentId: r.id, periodYear: y, periodMonth: m } },
-      });
-      if (before) return;
+      if (byPeriod.has(key(r.id, y, m))) return;
       await ensureRentCharge(prisma, { hostelId: r.hostelId, residentId: r.id, year: y, month: m, amount, dueDay: due, ...extra });
       created++;
     };
@@ -192,11 +201,11 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     const firstDue = firstChargeDueDate(r.billingMode, admission, dueDay);
 
     if (r.billingMode === "ANCHORED") {
-      const anchorDay = Math.min(admission.getDate(), 28);
+      // dueDay is the resident's billing day — the join day unless changed.
       for (let k = 0; ; k++) {
         const cs = new Date(firstY, firstM - 1 + k, 1);
         if (!started(cs.getFullYear(), cs.getMonth())) break;
-        await ensure(cs.getFullYear(), cs.getMonth() + 1, rent, anchorDay, k === 0 ? { dueDate: firstDue } : {});
+        await ensure(cs.getFullYear(), cs.getMonth() + 1, rent, dueDay, k === 0 ? { dueDate: firstDue } : {});
       }
     } else {
       const cursor = new Date(firstY, firstM - 1, 1);
@@ -219,9 +228,7 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     // Repair: a join-month charge must never fall due before the resident
     // joined (older records were due on the month's rent day even when they
     // joined after it, so they showed "overdue" from day one).
-    const joinCharge = await prisma.rentCharge.findUnique({
-      where: { residentId_periodYear_periodMonth: { residentId: r.id, periodYear: firstY, periodMonth: firstM } },
-    });
+    const joinCharge = byPeriod.get(key(r.id, firstY, firstM));
     if (joinCharge && joinCharge.dueDate < new Date(firstY, firstM - 1, admission.getDate()) && joinCharge.status !== "WAIVED") {
       await prisma.rentCharge.update({
         where: { id: joinCharge.id },
@@ -238,6 +245,45 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     await applyResidentAdvances(prisma, r.id);
   }
   return created;
+}
+
+// Re-date the still-unpaid rent charges of these residents after their due
+// day changed (the hostel's "rent due by" day, or the resident's own terms):
+// each open month moves to the new due day — a join month to the first due
+// day on/after joining — and its status is recomputed. Paid months keep their
+// history. Returns the number of charges moved.
+export async function redateOpenCharges(db: Tx, where: { hostelId?: string; residentId?: string }): Promise<number> {
+  const residents = await db.resident.findMany({
+    where: {
+      ...(where.hostelId ? { hostelId: where.hostelId } : {}),
+      ...(where.residentId ? { id: where.residentId } : {}),
+      status: { in: ["ACTIVE", "NOTICE_GIVEN"] },
+      admissionDate: { not: null },
+      occupantType: { not: "DAILY" },
+    },
+    include: {
+      hostel: { select: { rentDueDay: true } },
+      rentCharges: { where: { status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] } } },
+    },
+  });
+  let moved = 0;
+  for (const r of residents) {
+    const adm = r.admissionDate!;
+    const dueDay = residentDueDay(r, r.hostel.rentDueDay);
+    for (const c of r.rentCharges) {
+      const isJoin = c.periodYear === adm.getFullYear() && c.periodMonth === adm.getMonth() + 1;
+      const due = isJoin
+        ? firstChargeDueDate(r.billingMode, adm, dueDay)
+        : endOfDay(c.periodYear, c.periodMonth - 1, dueDay);
+      if (due.getTime() === c.dueDate.getTime()) continue;
+      await db.rentCharge.update({
+        where: { id: c.id },
+        data: { dueDate: due, status: computeStatus(Number(c.amount), Number(c.discount), Number(c.amountPaid), due) },
+      });
+      moved++;
+    }
+  }
+  return moved;
 }
 
 // Apply a resident's unallocated payment credit ("advance") to their oldest
@@ -326,7 +372,7 @@ export function rentCycle(
   dueDay: number,
   now = new Date()
 ): RentCycle {
-  const day = Math.min(dueDay || 10, 28);
+  const day = Math.min(dueDay || 5, 28);
   const unpaid = charges
     .filter((c) => c.amount - c.discount - c.amountPaid > 0.001)
     .sort((a, b) => a.periodYear - b.periodYear || a.periodMonth - b.periodMonth);

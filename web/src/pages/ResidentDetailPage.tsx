@@ -12,7 +12,7 @@ import { uploadFile } from "../lib/upload";
 import { formatPKR, formatDate, formatDateTime, titleCase } from "../lib/format";
 import { elementToPdf } from "../lib/pdfExport";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
-import { firstMonthPlan, periodLabel, formatPerDay, MONTHS } from "../lib/rent";
+import { firstMonthPlan, periodLabel, formatPerDay, dueWindow, MONTHS } from "../lib/rent";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
 
 const DOC_TYPES: [string, string][] = [
@@ -274,7 +274,7 @@ export default function ResidentDetailPage() {
   if (!r) return <EmptyState title="Resident not found" />;
 
   const active = r.status === "ACTIVE" || r.status === "NOTICE_GIVEN";
-  const admitPlan = firstMonthPlan({ admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, dueDay: r.hostel?.rentDueDay ?? 10 });
+  const admitPlan = firstMonthPlan({ admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, dueDay: r.hostel?.rentDueDay ?? 5 });
   const fm = r.firstMonth;
   let prorateDismissed = prorateHidden;
   try { prorateDismissed ||= !!(fm?.chargeId && localStorage.getItem(`prorate-dismissed:${fm.chargeId}`)); } catch { /* storage unavailable */ }
@@ -466,7 +466,7 @@ export default function ResidentDetailPage() {
                   <p className="text-xs text-slate-400">
                     {r.billingMode === "ANCHORED"
                       ? `Billed every month on day ${r.rentCycle.dueDay} (their join day).`
-                      : `Calendar month — rent due by day ${r.rentCycle.dueDay}.`}
+                      : `Calendar month — rent due ${dueWindow(r.rentCycle.dueDay)} of each month.`}
                     {r.proratedFirst ? " First month was pro-rated." : ""}
                   </p>
                 </div>
@@ -523,7 +523,7 @@ export default function ResidentDetailPage() {
                 {/* Desktop: table */}
                 <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Due by</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2 pr-3">Period</th><th className="pr-3">Due by</th><th className="pr-3">Amount</th><th className="pr-3">Paid</th><th className="pr-3">Balance</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                       {r.rentCharges.map((c: any) => (
                         <tr key={c.id} className="border-t border-slate-100">
@@ -706,8 +706,8 @@ export default function ResidentDetailPage() {
             <option value="CALENDAR">Calendar month (due by the hostel's rent day)</option>
             <option value="ANCHORED">Every month on the join day</option>
           </Select>
-          <Input label="Rent due day of month (optional)" type="number" min={1} max={28} value={termsForm.billingDay}
-            onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })} placeholder="Falls back to the hostel's day" />
+          <Input label="Rent due by — day of month (optional)" type="number" min={1} max={28} value={termsForm.billingDay}
+            onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })} placeholder={`Hostel default: ${dueWindow(r.hostel?.rentDueDay ?? 5)}`} />
           <p className="text-xs text-slate-400">New rent applies to future months. To change a month already charged, use <b>Adjust</b> on that row.</p>
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setTerms(false)}>Cancel</Button><Button loading={saving} onClick={saveTerms}>Save</Button></div>
@@ -865,7 +865,7 @@ export default function ResidentDetailPage() {
                   <option value="FULL">Full month's rent</option>
                 </Select>
               )}
-              <FirstMonthSummary plan={admitPlan} monthlyRent={admitForm.monthlyRent} billingMode={admitForm.billingMode} dueDay={r.hostel?.rentDueDay ?? 10} />
+              <FirstMonthSummary plan={admitPlan} monthlyRent={admitForm.monthlyRent} billingMode={admitForm.billingMode} dueDay={r.hostel?.rentDueDay ?? 5} />
               <div className="grid grid-cols-2 gap-3">
                 <MoneyInput label="Rent collected now (optional)" value={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
                 <Select label="Method" value={admitForm.paymentMethod} onChange={(e) => setAdmitForm({ ...admitForm, paymentMethod: e.target.value })}>

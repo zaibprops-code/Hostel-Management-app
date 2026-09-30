@@ -9,7 +9,7 @@ import { formatPKR, formatDate } from "../lib/format";
 import { IconAdmission, IconPlus, IconSearch } from "../components/icons";
 import { compressPhoto, compressDocument } from "../lib/image";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
-import { firstMonthPlan, ordinal } from "../lib/rent";
+import { firstMonthPlan, dueWindow } from "../lib/rent";
 
 // Document kinds a hostel typically keeps for a resident.
 const DOC_TYPES: [string, string][] = [
@@ -102,7 +102,7 @@ export default function AdmissionsPage() {
   // Beds / rooms available in the chosen hostel.
   const hostelBeds = beds.filter((b) => !form.hostelId || b.hostelId === form.hostelId);
   // First-month rent preview — mirrors what the server will charge.
-  const hostelDueDay = hostels.find((h) => h.id === form.hostelId)?.rentDueDay ?? 10;
+  const hostelDueDay = hostels.find((h) => h.id === form.hostelId)?.rentDueDay ?? 5;
   const plan = firstMonthPlan({ admissionDate: form.admissionDate, monthlyRent: form.monthlyRent, billingMode: form.billingMode, proratedFirst: form.proratedFirst, dueDay: hostelDueDay });
   const hostelRooms = rooms.filter((r) => !form.hostelId || r.hostelId === form.hostelId);
   const selectedBed = beds.find((b) => b.id === form.bedId);
@@ -367,7 +367,7 @@ export default function AdmissionsPage() {
                   <NumberInput label="Contract (months)" value={form.contractMonths} onChange={(n) => setForm({ ...form, contractMonths: n })} />
 
                   <Select label="Rent cycle" value={form.billingMode} onChange={(e) => setForm({ ...form, billingMode: e.target.value })}>
-                    <option value="CALENDAR">Calendar month (rent due by the {ordinal(hostelDueDay)})</option>
+                    <option value="CALENDAR">Calendar month (rent due {dueWindow(hostelDueDay)})</option>
                     <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
                   </Select>
                   {form.billingMode === "CALENDAR" && (

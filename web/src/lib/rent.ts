@@ -39,7 +39,7 @@ export function firstMonthPlan(o: { admissionDate: string; monthlyRent: number; 
   const dim = new Date(p.y, p.m0 + 1, 0).getDate();
   const days = dim - p.d + 1;
   const prorated = o.billingMode === "CALENDAR" && o.proratedFirst && p.d > 1;
-  const dueDay = Math.min(o.dueDay || 10, 28);
+  const dueDay = Math.min(o.dueDay || 5, 28);
   const dueDate = o.billingMode === "ANCHORED"
     ? new Date(p.y, p.m0, p.d)
     : p.d <= dueDay ? new Date(p.y, p.m0, dueDay) : new Date(p.y, p.m0 + 1, dueDay);
@@ -60,6 +60,12 @@ export function firstMonthPlan(o: { admissionDate: string; monthlyRent: number; 
 // "₨709.68" — the daily rate, kept to 2 decimals so days × rate visibly adds up.
 export function formatPerDay(n: number): string {
   return "₨ " + n.toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+// The window rent is paid in each month: "1st–5th" (or "the 1st").
+export function dueWindow(dueDay: number): string {
+  const d = Math.min(dueDay || 5, 28);
+  return d <= 1 ? "on the 1st" : `1st–${ordinal(d)}`;
 }
 
 // "10th", "1st", "22nd"

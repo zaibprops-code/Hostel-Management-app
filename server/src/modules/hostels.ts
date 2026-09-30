@@ -6,6 +6,7 @@ import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, accessibleHostelIds, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
+import { redateOpenCharges } from "../lib/rent";
 
 const router = Router();
 
@@ -114,6 +115,11 @@ router.put(
     const before = await prisma.hostel.findUnique({ where: { id: req.params.id } });
     if (!before) throw notFound("Hostel not found");
     const hostel = await prisma.hostel.update({ where: { id: req.params.id }, data: req.body });
+    // New rent-due day → residents on the hostel's day get their unpaid
+    // months re-dated to it (e.g. 10th → 5th).
+    if (req.body.rentDueDay != null && req.body.rentDueDay !== before.rentDueDay) {
+      await redateOpenCharges(prisma, { hostelId: hostel.id });
+    }
     await audit({ userId: req.auth!.id, action: "hostel.update", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, oldValue: before, newValue: req.body });
     res.json(hostel);
   })

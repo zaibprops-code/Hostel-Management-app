@@ -6,7 +6,7 @@ import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
-import { catchUpRent, rentCycle, computeStatus, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, applyResidentAdvances } from "../lib/rent";
+import { catchUpRent, generateDueRent, redateOpenCharges, rentCycle, computeStatus, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, applyResidentAdvances } from "../lib/rent";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -115,6 +115,14 @@ router.get(
   "/:id",
   requirePermission("residents.view"),
   asyncHandler(async (req, res) => {
+    const head = await prisma.resident.findUnique({ where: { id: req.params.id }, select: { hostelId: true } });
+    if (!head) throw notFound("Resident not found");
+    await assertHostelAccess(req, head.hostelId);
+    // Bring this resident's rent up to date: any month they now owe is
+    // charged, and unpaid months past their due date read OVERDUE.
+    await generateDueRent(prisma, undefined, [req.params.id]);
+    await prisma.rentCharge.updateMany({ where: { residentId: req.params.id, status: "PENDING", dueDate: { lt: new Date() } }, data: { status: "OVERDUE" } });
+
     const resident = await prisma.resident.findUnique({
       where: { id: req.params.id },
       include: {
@@ -278,6 +286,8 @@ router.patch(
     if (req.body.billingMode) data.billingMode = req.body.billingMode;
     if (req.body.billingDay !== undefined) data.billingDay = req.body.billingDay;
     const resident = await prisma.resident.update({ where: { id: before.id }, data });
+    // A new due day / cycle moves the months still unpaid to match.
+    if (data.billingMode || data.billingDay !== undefined) await redateOpenCharges(prisma, { residentId: resident.id });
     await audit({ userId: req.auth!.id, action: "resident.billing", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, newValue: data });
     res.json({ id: resident.id, monthlyRent: dec(resident.monthlyRent), billingMode: resident.billingMode, billingDay: resident.billingDay });
   })
