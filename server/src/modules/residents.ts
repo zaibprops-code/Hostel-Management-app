@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
-import { asyncHandler, badRequest, notFound } from "../lib/http";
+import { asyncHandler, badRequest, conflict, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
@@ -147,6 +147,13 @@ router.get(
       0
     );
     const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
+    // Room changes, newest first (kept in the audit log).
+    const moves = await prisma.auditLog.findMany({
+      where: { entity: "Resident", entityId: resident.id, action: "resident.move" },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: { user: { select: { name: true } } },
+    });
 
     // Advance credit = money paid but not yet tied to any charge (an overpayment
     // or the leftover from a pro-rated join month) — it will settle future rent.
@@ -195,6 +202,21 @@ router.get(
       advanceCredit,
       rentCycle: cycle,
       firstMonth,
+      roomHistory: moves.map((m) => {
+        const o = (m.oldValue ?? {}) as Record<string, any>;
+        const n = (m.newValue ?? {}) as Record<string, any>;
+        return {
+          id: m.id,
+          movedOn: n.moveDate ?? ymd(m.createdAt),
+          from: [o.roomName, o.bedLabel].filter(Boolean).join(" · "),
+          to: [n.roomName, n.bedLabel].filter(Boolean).join(" · "),
+          oldRent: o.monthlyRent ?? null,
+          newRent: n.monthlyRent ?? null,
+          rentFrom: n.rentFrom ?? null,
+          reason: n.reason ?? null,
+          by: m.user?.name ?? null,
+        };
+      }),
       deposit: resident.deposit
         ? {
             ...resident.deposit,
@@ -394,6 +416,51 @@ async function moveCreditToDeposit(tx: any, resident: { id: string; hostelId: st
   await tx.depositTransaction.create({ data: { depositId: dep.id, type: "DEPOSIT", amount: moved, reason: "Converted from overpaid rent" } });
 }
 
+// Set a rent charge's amount / discount / due date / note. If more is already
+// paid against it than the new net, the excess is freed (newest allocations
+// first) and goes where `excessTo` says: the security deposit, or advance
+// credit that settles the coming months.
+async function resetCharge(
+  tx: any,
+  resident: { id: string; hostelId: string },
+  charge: { id: string; amountPaid: unknown; allocations: { id: string; amount: unknown }[] },
+  next: { amount: number; discount: number; dueDate: Date; notes: string | null; excessTo: "deposit" | "credit" }
+): Promise<void> {
+  const net = Math.max(0, next.amount - next.discount);
+  let paid = dec(charge.amountPaid as any);
+  if (paid > net) {
+    let excess = paid - net;
+    const allocs = [...charge.allocations].sort((a, b) => b.id.localeCompare(a.id));
+    for (const a of allocs) {
+      if (excess <= 0.001) break;
+      const amt = dec(a.amount as any);
+      const cut = Math.min(amt, excess);
+      if (cut >= amt - 0.001) await tx.paymentAllocation.delete({ where: { id: a.id } });
+      else await tx.paymentAllocation.update({ where: { id: a.id }, data: { amount: amt - cut } });
+      excess -= cut;
+      paid -= cut;
+    }
+  }
+  const waived = next.discount > 0 && net <= 0.001 && paid <= 0.001;
+  await tx.rentCharge.update({
+    where: { id: charge.id },
+    data: {
+      amount: next.amount, discount: next.discount, amountPaid: paid, dueDate: next.dueDate,
+      status: waived ? "WAIVED" : computeStatus(next.amount, next.discount, paid, next.dueDate),
+      notes: next.notes,
+    },
+  });
+  const freed = Math.max(0, dec(charge.amountPaid as any) - paid);
+  if (freed > 0.001 && next.excessTo !== "credit") {
+    // Overpaid rent turns into security deposit — next month stays billable
+    // in full (the resident does not get a rent discount for paying early).
+    await moveCreditToDeposit(tx, resident, freed);
+  } else {
+    // Keep it as advance credit against the coming months.
+    await applyResidentAdvances(tx, resident.id);
+  }
+}
+
 // POST /api/residents/:id/charges/:chargeId/adjust — make a single month's rent
 // flexible: change its amount (e.g. pro-rate the join month), apply a discount,
 // or waive the balance. If a payment was already over-applied to this charge,
@@ -439,51 +506,156 @@ router.post(
     // becomes a zero-net waiver).
     if (req.body.waive) discount = Math.max(0, amount - dec(charge.amountPaid));
 
-    const net = Math.max(0, amount - discount);
-
     await prisma.$transaction(async (tx) => {
-      // If more is already allocated to this charge than the new net, free the
-      // excess by trimming allocations (newest first) back into advance credit.
-      let paid = dec(charge.amountPaid);
-      if (paid > net) {
-        let excess = paid - net;
-        const allocs = [...charge.allocations].sort((a, b) => b.id.localeCompare(a.id));
-        for (const a of allocs) {
-          if (excess <= 0.001) break;
-          const amt = dec(a.amount);
-          const cut = Math.min(amt, excess);
-          if (cut >= amt - 0.001) await tx.paymentAllocation.delete({ where: { id: a.id } });
-          else await tx.paymentAllocation.update({ where: { id: a.id }, data: { amount: amt - cut } });
-          excess -= cut;
-          paid -= cut;
-        }
-      }
-      const waived = discount > 0 && net <= 0.001 && paid <= 0.001;
-      await tx.rentCharge.update({
-        where: { id: charge.id },
-        data: {
-          amount, discount, amountPaid: paid,
-          dueDate,
-          status: waived ? "WAIVED" : computeStatus(amount, discount, paid, dueDate),
-          notes,
-        },
-      });
       if (req.body.prorate && resident.billingMode === "CALENDAR") {
         await tx.resident.update({ where: { id: resident.id }, data: { proratedFirst: true } });
       }
-      const freed = Math.max(0, dec(charge.amountPaid) - paid);
-      if (freed > 0.001 && req.body.excessTo !== "credit") {
-        // Overpaid rent turns into security deposit — next month stays billable
-        // in full (the resident does not get a rent discount for paying early).
-        await moveCreditToDeposit(tx, resident, freed);
-      } else {
-        // Keep it as advance credit against the coming months.
-        await applyResidentAdvances(tx, resident.id);
-      }
+      await resetCharge(tx, resident, charge, { amount, discount, dueDate, notes, excessTo: req.body.excessTo });
     });
 
     await audit({ userId: req.auth!.id, action: "rentcharge.adjust", entity: "RentCharge", entityId: charge.id, hostelId: resident.hostelId, oldValue: { amount: dec(charge.amount), discount: dec(charge.discount) }, newValue: { amount, discount } });
     res.json({ success: true });
+  })
+);
+
+// POST /api/residents/:id/move — change a resident's room / bed within their
+// hostel. The new bed must be free; the old bed becomes available (or goes to
+// maintenance). Rent can stay, or change to a new amount starting either
+//   • NEXT_MONTH — the move month is billed as before, later months at the new
+//     rent; or
+//   • MOVE_DATE — the move month is split by days (old rent before the move,
+//     new rent from the move day), later months at the new rent.
+// Any rent already paid above a reduced charge becomes advance credit.
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const perDayLabel = (n: number) => `₨${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+router.post(
+  "/:id/move",
+  requirePermission("residents.manage"),
+  validateBody(z.object({
+    bedId: z.string(),
+    moveDate: z.coerce.date(),
+    monthlyRent: z.coerce.number().min(0).optional(),
+    rentFrom: z.enum(["NEXT_MONTH", "MOVE_DATE"]).default("NEXT_MONTH"),
+    oldBedStatus: z.enum(["AVAILABLE", "MAINTENANCE"]).default("AVAILABLE"),
+    reason: z.string().max(300).optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const body = req.body as { bedId: string; moveDate: Date; monthlyRent?: number; rentFrom: "NEXT_MONTH" | "MOVE_DATE"; oldBedStatus: "AVAILABLE" | "MAINTENANCE"; reason?: string };
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { bed: { include: { room: true } } } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    if (resident.status !== "ACTIVE" && resident.status !== "NOTICE_GIVEN") throw badRequest("Only a current resident can change rooms.");
+    if (resident.occupantType === "DAILY") throw badRequest("Daily guests book a whole room — check them out and book the new room instead.");
+    if (!resident.bed || !resident.admissionDate) throw badRequest(`${resident.fullName} has no bed yet — use Assign instead.`);
+
+    const target = await prisma.bed.findUnique({ where: { id: body.bedId }, include: { room: true, resident: { select: { id: true } } } });
+    if (!target) throw notFound("Bed not found");
+    if (target.id === resident.bed.id) throw badRequest("That is already their bed.");
+    if (target.hostelId !== resident.hostelId) throw badRequest("Rooms can only be changed within the same hostel. To move branches, check out here and admit there.");
+
+    // Move date: not before they joined, not in the future (1 day slack for
+    // time zones).
+    const adm = resident.admissionDate;
+    const move = body.moveDate;
+    if (move < new Date(adm.getFullYear(), adm.getMonth(), adm.getDate())) throw badRequest("The move date can't be before the resident joined.");
+    if (move.getTime() > Date.now() + 86400000) throw badRequest("The move date can't be in the future.");
+
+    const oldRent = dec(resident.monthlyRent);
+    const newRent = body.monthlyRent ?? oldRent;
+    const rentChanges = Math.abs(newRent - oldRent) > 0.5;
+    if (rentChanges && body.rentFrom === "MOVE_DATE" && resident.billingMode !== "CALENDAR") {
+      throw badRequest("Splitting the month by days works for calendar-month rent. Choose 'from next month' instead.");
+    }
+
+    // Keep room history in order: a move can't be dated before the last one.
+    const priorMoves = await prisma.auditLog.findMany({
+      where: { entity: "Resident", entityId: resident.id, action: "resident.move" },
+      orderBy: { createdAt: "desc" },
+    });
+    const moveDates = priorMoves.map((m) => (m.newValue as any)?.moveDate as string | undefined).filter(Boolean) as string[];
+    const lastMove = moveDates.sort().pop();
+    if (lastMove && ymd(move) < lastMove) throw badRequest(`The move date can't be before their last room change (${lastMove}).`);
+
+    // Make sure every month owed so far exists at the old rent before changing it.
+    await generateDueRent(prisma, undefined, [resident.id]);
+
+    const my = move.getFullYear();
+    const mm = move.getMonth() + 1;
+    const dim = new Date(my, mm, 0).getDate();
+    const moveDay = move.getDate();
+    const fromBed = resident.bed;
+    // An earlier room change this month that already split the month by days:
+    // its new rent is what the rest of this month is billed at now.
+    const ymPrefix = `${my}-${String(mm).padStart(2, "0")}`;
+    const earlierSplit = priorMoves
+      .map((m) => m.newValue as any)
+      .find((n) => n?.rentFrom === "MOVE_DATE" && typeof n?.moveDate === "string" && n.moveDate.startsWith(ymPrefix));
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Lock the target bed so it can't be taken at the same moment.
+        await tx.$queryRaw`SELECT id FROM "Bed" WHERE id = ${target.id} FOR UPDATE`;
+        const fresh = await tx.bed.findUnique({ where: { id: target.id }, include: { resident: { select: { id: true } } } });
+        if (!fresh || fresh.resident || fresh.status === "OCCUPIED") {
+          throw conflict(`${target.room.name} · ${target.label} is already taken. Pick another bed.`);
+        }
+        if (fresh.status !== "AVAILABLE") {
+          throw conflict(`${target.room.name} · ${target.label} is marked ${fresh.status.toLowerCase()}, not free. Pick another bed or set it to Available first.`);
+        }
+
+        await tx.resident.update({ where: { id: resident.id }, data: { bedId: target.id, ...(rentChanges ? { monthlyRent: newRent } : {}) } });
+        await tx.bed.update({ where: { id: fromBed.id }, data: { status: body.oldBedStatus } });
+        await tx.bed.update({ where: { id: target.id }, data: { status: "OCCUPIED" } });
+
+        if (!rentChanges) return;
+        const charges = await tx.rentCharge.findMany({
+          where: { residentId: resident.id, status: { not: "WAIVED" } },
+          include: { allocations: true },
+        });
+        for (const c of charges) {
+          const after = c.periodYear > my || (c.periodYear === my && c.periodMonth > mm);
+          const isMoveMonth = c.periodYear === my && c.periodMonth === mm;
+          if (after) {
+            // Later months: the new rent in full.
+            await resetCharge(tx, resident, c, { amount: newRent, discount: dec(c.discount), dueDate: c.dueDate, notes: c.notes, excessTo: "credit" });
+          } else if (isMoveMonth && body.rentFrom === "MOVE_DATE") {
+            // Move month: the days before the move stay billed exactly as they
+            // are; the days from the move day on are re-priced at the new rent.
+            // A pro-rated join month starts on the join day.
+            const isJoin = my === adm.getFullYear() && mm === adm.getMonth() + 1;
+            const startDay = isJoin && resident.proratedFirst ? adm.getDate() : 1;
+            const covered = dim - startDay + 1;
+            const oldDays = Math.max(0, moveDay - startDay);
+            const newDays = dim - moveDay + 1;
+            const tailPerDay = earlierSplit ? Number(earlierSplit.monthlyRent) / dim : dec(c.amount) / covered;
+            const amount = Math.max(0, Math.round(dec(c.amount) - tailPerDay * newDays + (newRent * newDays) / dim));
+            const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+            const note = earlierSplit && c.notes
+              ? `${c.notes}; then ${moveDay} ${MONTHS[mm - 1]}: ${days(newDays)} × ${perDayLabel(newRent / dim)}`
+              : `Room change ${moveDay} ${MONTHS[mm - 1]}: ${days(oldDays)} × ${perDayLabel(tailPerDay)} + ${days(newDays)} × ${perDayLabel(newRent / dim)}`;
+            await resetCharge(tx, resident, c, { amount, discount: dec(c.discount), dueDate: c.dueDate, notes: note, excessTo: "credit" });
+          }
+        }
+      });
+    } catch (e: any) {
+      // Unique bed constraint — someone was given this bed at the same moment.
+      if (e?.code === "P2002") throw conflict(`${target.room.name} · ${target.label} was just taken. Pick another bed.`);
+      throw e;
+    }
+
+    await audit({
+      userId: req.auth!.id,
+      action: "resident.move",
+      entity: "Resident",
+      entityId: resident.id,
+      hostelId: resident.hostelId,
+      oldValue: { bedId: fromBed.id, roomName: fromBed.room.name, bedLabel: fromBed.label, monthlyRent: oldRent },
+      newValue: {
+        bedId: target.id, roomName: target.room.name, bedLabel: target.label, monthlyRent: newRent,
+        moveDate: ymd(move), rentFrom: rentChanges ? body.rentFrom : null, oldBedStatus: body.oldBedStatus, reason: body.reason || null,
+      },
+    });
+    res.json({ success: true, room: target.room.name, bed: target.label, monthlyRent: newRent });
   })
 );
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { api, apiError } from "../lib/api";
 import { toast } from "../lib/toast";
@@ -11,8 +12,9 @@ import { formatPKR, titleCase } from "../lib/format";
 import { IconBed, IconPlus } from "../components/icons";
 import { firstMonthPlan } from "../lib/rent";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
+import MoveResidentModal from "../components/MoveResidentModal";
 
-interface Bed { id: string; label: string; status: string; monthlyRent: number; resident: { id: string; fullName: string } | null }
+interface Bed { id: string; label: string; status: string; monthlyRent: number; resident: { id: string; fullName: string; occupantType?: string } | null }
 interface Room { id: string; name: string; capacity: number; floor: string; floorLevel: number; hostel: { id: string; name: string }; beds: Bed[] }
 
 interface PoolResident { id: string; fullName: string; phone?: string | null; status: string; pendingReview?: boolean }
@@ -51,6 +53,7 @@ export default function RoomsPage() {
   const [editForm, setEditForm] = useState<{ name: string; capacity: number }>({ name: "", capacity: 1 });
   // "Assign resident" (occupy a bed) state.
   const [assign, setAssign] = useState<null | { bed: Bed; roomName: string; hostelId: string }>(null);
+  const [moveId, setMoveId] = useState<string | null>(null);
   const [pool, setPool] = useState<PoolResident[]>([]);
   const [poolLoading, setPoolLoading] = useState(false);
   const [assignForm, setAssignForm] = useState<typeof EMPTY_ASSIGN>(EMPTY_ASSIGN);
@@ -217,8 +220,20 @@ export default function RoomsPage() {
                         <IconBed className="h-4 w-4 opacity-60" />
                       )}
                     </div>
-                    <p className="mt-1 truncate font-medium">{bed.resident ? bed.resident.fullName : bed.status.charAt(0) + bed.status.slice(1).toLowerCase()}</p>
+                    {bed.resident ? (
+                      <Link to={`/residents/${bed.resident.id}`} className="mt-1 block truncate font-medium hover:underline">{bed.resident.fullName}</Link>
+                    ) : (
+                      <p className="mt-1 truncate font-medium">{bed.status.charAt(0) + bed.status.slice(1).toLowerCase()}</p>
+                    )}
                     <p className="opacity-70">{formatPKR(bed.monthlyRent)}</p>
+                    {can("residents.manage") && bed.resident && bed.resident.occupantType !== "DAILY" && (
+                      <button
+                        onClick={() => setMoveId(bed.resident!.id)}
+                        className="mt-1.5 w-full rounded border border-current/30 bg-white/70 px-1 py-1 text-[11px] font-semibold hover:bg-white"
+                      >
+                        ⇄ Change room
+                      </button>
+                    )}
                     {can("rooms.manage") && !bed.resident && (
                       <select
                         className="mt-1.5 w-full rounded border border-current/20 bg-white/60 px-1 py-0.5 text-[11px]"
@@ -313,6 +328,8 @@ export default function RoomsPage() {
           </div>
         )}
       </Modal>
+
+      <MoveResidentModal residentId={moveId} open={!!moveId} onClose={() => setMoveId(null)} onMoved={() => { refetch(); reload(); }} />
 
       <Modal open={!!assign} onClose={() => setAssign(null)} title={assign ? `Assign resident — ${assign.roomName} · ${assign.bed.label}` : "Assign resident"}>
         {assign && (() => {

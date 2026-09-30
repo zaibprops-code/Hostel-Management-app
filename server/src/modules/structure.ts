@@ -176,7 +176,7 @@ router.get(
         hostel: { select: { id: true, name: true } },
         beds: {
           orderBy: { label: "asc" },
-          include: { resident: { select: { id: true, fullName: true, status: true } } },
+          include: { resident: { select: { id: true, fullName: true, status: true, occupantType: true } } },
         },
       },
     });

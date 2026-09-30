@@ -14,6 +14,7 @@ import { elementToPdf } from "../lib/pdfExport";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 import { firstMonthPlan, periodLabel, formatPerDay, dueWindow, MONTHS } from "../lib/rent";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
+import MoveResidentModal from "../components/MoveResidentModal";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
@@ -47,6 +48,7 @@ export default function ResidentDetailPage() {
   const [termsForm, setTermsForm] = useState<any>({ monthlyRent: 0, billingMode: "CALENDAR", billingDay: "" });
   const [adjust, setAdjust] = useState<null | any>(null);
   const [prorateOpen, setProrateOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [prorateExcess, setProrateExcess] = useState("deposit");
   const [prorateHidden, setProrateHidden] = useState(false);
   const [adjForm, setAdjForm] = useState<any>({ amount: 0, note: "" });
@@ -274,6 +276,8 @@ export default function ResidentDetailPage() {
   if (!r) return <EmptyState title="Resident not found" />;
 
   const active = r.status === "ACTIVE" || r.status === "NOTICE_GIVEN";
+  // Monthly residents in a bed can change rooms (daily guests book whole rooms).
+  const canMove = can("residents.manage") && active && r.occupantType !== "DAILY" && !!r.bed;
   const admitPlan = firstMonthPlan({ admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, dueDay: r.hostel?.rentDueDay ?? 5 });
   const fm = r.firstMonth;
   let prorateDismissed = prorateHidden;
@@ -302,6 +306,7 @@ export default function ResidentDetailPage() {
                 (can("residents.manage") && r.occupantType !== "DAILY") ? { label: "✏️ Edit rent terms", onClick: openTerms } : null,
                 (can("payments.manage") && active) ? { label: "🛡 Record deposit", onClick: openDeposit } : null,
                 (can("payments.manage") && active && depositEditable) ? { label: "✏️ Edit deposit", onClick: openDepositEdit } : null,
+                canMove ? { label: "🔁 Change room", onClick: () => setMoveOpen(true) } : null,
                 (can("residents.manage") && r.status === "ACTIVE") ? { label: "🔔 Give Notice", onClick: () => setNotice(true) } : null,
                 (can("residents.manage") && !r.userId) ? { label: "🔑 Create Portal Login", onClick: () => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); } } : null,
                 (can("residents.manage") && active) ? { label: "🚪 Checkout", onClick: () => setCheckout(true) } : null,
@@ -376,6 +381,15 @@ export default function ResidentDetailPage() {
               <button onClick={archiveFiles} className="mt-3 text-xs text-slate-400 hover:text-rose-600">Archive files (free up space)</button>
             )}
           </div>
+          {r.bed && (
+            <div className="flex items-center justify-between gap-2 text-sm mb-2 rounded-lg bg-slate-50 px-3 py-2">
+              <span className="text-slate-400">Room</span>
+              <span className="flex items-center gap-3 min-w-0">
+                <span className="font-medium text-slate-700 truncate">{r.bed.room?.name} · {r.bed.label}</span>
+                {canMove && <button onClick={() => setMoveOpen(true)} className="text-xs font-medium text-brand-600 shrink-0">Change</button>}
+              </span>
+            </div>
+          )}
           <dl className="space-y-2 text-sm">
             {[
               ["Type", { STUDENT: "Student", PROFESSIONAL: "Professional", DAILY: "Daily guest" }[r.occupantType as string] ?? "Student"],
@@ -572,6 +586,28 @@ export default function ResidentDetailPage() {
               </div>
             )}
           </Card>
+
+          {!!r.roomHistory?.length && (
+            <Card className="p-5">
+              <h3 className="font-semibold text-slate-800 mb-3">Room History</h3>
+              <div className="divide-y divide-slate-100">
+                {r.roomHistory.map((h: any) => (
+                  <div key={h.id} className="py-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-slate-700 min-w-0"><span className="text-slate-400">{h.from || "—"}</span> → <b className="font-medium">{h.to || "—"}</b></p>
+                      <span className="text-xs text-slate-400 shrink-0">{formatDate(h.movedOn)}</span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {h.oldRent != null && h.newRent != null && Math.abs(h.newRent - h.oldRent) > 0.5
+                        ? `Rent ${formatPKR(h.oldRent)} → ${formatPKR(h.newRent)} ${h.rentFrom === "MOVE_DATE" ? "from the move date" : "from the next month"}`
+                        : "Rent unchanged"}
+                      {h.reason ? ` · ${h.reason}` : ""}{h.by ? ` · by ${h.by}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -789,6 +825,8 @@ export default function ResidentDetailPage() {
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setPortal(false)}>Cancel</Button><Button loading={saving} onClick={createPortalAccess}>Create Login</Button></div>
         </div>
       </Modal>
+
+      <MoveResidentModal residentId={id ?? null} open={moveOpen} onClose={() => setMoveOpen(false)} onMoved={refetch} />
 
       {/* Full-screen photo / document viewer */}
       {viewing && <FileViewer open={true} onClose={() => setViewing(null)} url={viewing.url} name={viewing.name} mime={viewing.mime} onDelete={viewing.onDelete} />}
