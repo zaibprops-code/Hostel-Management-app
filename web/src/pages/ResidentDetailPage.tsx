@@ -39,6 +39,8 @@ export default function ResidentDetailPage() {
   const [payProof, setPayProof] = useState<File | null>(null);
   const [deposit, setDeposit] = useState(false);
   const [depForm, setDepForm] = useState<any>({ amount: 0, method: "CASH" });
+  const [depEdit, setDepEdit] = useState(false);
+  const [depEditForm, setDepEditForm] = useState<any>({ amount: 0, method: "CASH", reason: "" });
   const [terms, setTerms] = useState(false);
   const [termsForm, setTermsForm] = useState<any>({ monthlyRent: 0, billingMode: "CALENDAR", billingDay: "" });
   const [adjust, setAdjust] = useState<null | any>(null);
@@ -135,6 +137,19 @@ export default function ResidentDetailPage() {
     setSaving(true); setError("");
     try { await api.post(`/residents/${id}/deposit`, depForm); setDeposit(false); await refetch(); toast.success("Security deposit recorded."); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+
+  // Edit the deposit held — set it to the exact correct amount.
+  function openDepositEdit() {
+    setDepEditForm({ amount: r.deposit?.amount ?? 0, method: r.deposit?.method ?? "CASH", reason: "" });
+    setError(""); setDepEdit(true);
+  }
+  async function saveDepositEdit() {
+    setSaving(true); setError("");
+    try {
+      await api.put(`/residents/${id}/deposit`, { amount: depEditForm.amount, method: depEditForm.method, reason: depEditForm.reason || undefined });
+      setDepEdit(false); await refetch(); toast.success("Security deposit updated.");
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
   function openTerms() {
@@ -239,6 +254,8 @@ export default function ResidentDetailPage() {
   if (!r) return <EmptyState title="Resident not found" />;
 
   const active = r.status === "ACTIVE" || r.status === "NOTICE_GIVEN";
+  // A deposit already settled at checkout (refunded / forfeited) is locked.
+  const depositEditable = !r.deposit || r.deposit.status === "HELD";
 
   return (
     <div>
@@ -259,6 +276,7 @@ export default function ResidentDetailPage() {
                 canShareFiles() ? { label: "📤 Share Profile", onClick: () => exportProfile("share"), disabled: !!exporting } : null,
                 (can("residents.manage") && r.occupantType !== "DAILY") ? { label: "✏️ Edit rent terms", onClick: openTerms } : null,
                 (can("payments.manage") && active) ? { label: "🛡 Record deposit", onClick: openDeposit } : null,
+                (can("payments.manage") && active && depositEditable) ? { label: "✏️ Edit deposit", onClick: openDepositEdit } : null,
                 (can("residents.manage") && r.status === "ACTIVE") ? { label: "🔔 Give Notice", onClick: () => setNotice(true) } : null,
                 (can("residents.manage") && !r.userId) ? { label: "🔑 Create Portal Login", onClick: () => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); } } : null,
                 (can("residents.manage") && active) ? { label: "🚪 Checkout", onClick: () => setCheckout(true) } : null,
@@ -377,7 +395,12 @@ export default function ResidentDetailPage() {
             <Card className="p-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-400">Deposit Held</p>
-                {can("payments.manage") && active && <button onClick={openDeposit} className="text-xs font-medium text-brand-600">{r.deposit?.amount ? "＋" : "Record"}</button>}
+                {can("payments.manage") && active && (
+                  <span className="inline-flex gap-3">
+                    <button onClick={openDeposit} className="text-xs font-medium text-brand-600" title="Add to deposit">{r.deposit?.amount ? "＋ Add" : "Record"}</button>
+                    {!!r.deposit && depositEditable && <button onClick={openDepositEdit} className="text-xs font-medium text-brand-600">Edit</button>}
+                  </span>
+                )}
               </div>
               <p className="text-xl font-bold text-slate-800">{formatPKR(r.deposit?.amount ?? 0)}</p>
             </Card>
@@ -599,6 +622,36 @@ export default function ResidentDetailPage() {
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDeposit(false)}>Cancel</Button><Button loading={saving} disabled={!depForm.amount} onClick={recordDeposit}>Save Deposit</Button></div>
         </div>
+      </Modal>
+
+      {/* Edit security deposit */}
+      <Modal open={depEdit} onClose={() => setDepEdit(false)} title="Edit Security Deposit">
+        {(() => {
+          const current = r.deposit?.amount ?? 0;
+          const diff = (Number(depEditForm.amount) || 0) - current;
+          return (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm flex items-center justify-between">
+                <span className="text-slate-500">Currently held</span>
+                <span className="font-bold text-slate-800">{formatPKR(current)}</span>
+              </div>
+              <MoneyInput label="Correct deposit amount" value={depEditForm.amount} onChange={(n) => setDepEditForm({ ...depEditForm, amount: n })} />
+              <Select label="Method" value={depEditForm.method} onChange={(e) => setDepEditForm({ ...depEditForm, method: e.target.value })}>
+                {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
+              </Select>
+              <Input label="Reason (optional)" value={depEditForm.reason} onChange={(e) => setDepEditForm({ ...depEditForm, reason: e.target.value })} placeholder="e.g. Entered wrong amount" />
+              <p className="text-xs text-slate-500">
+                {Math.abs(diff) < 0.001
+                  ? "No change to the amount."
+                  : diff > 0
+                  ? `Deposit goes up by ${formatPKR(diff)}. The change is logged on the deposit ledger.`
+                  : `Deposit goes down by ${formatPKR(-diff)}. The change is logged on the deposit ledger.`}
+              </p>
+              <ErrorText>{error}</ErrorText>
+              <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setDepEdit(false)}>Cancel</Button><Button loading={saving} onClick={saveDepositEdit}>Save</Button></div>
+            </div>
+          );
+        })()}
       </Modal>
 
       {/* Edit rent terms */}
@@ -963,7 +1016,7 @@ function ResidentPdfSheet({ innerRef, r, company }: { innerRef: React.RefObject<
                   <td style={td}>{formatDate(t.createdAt)}</td>
                   <td style={td}>{titleCase(t.type)}</td>
                   <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{formatPKR(t.amount)}</td>
-                  <td style={td}>{t.note || "—"}</td>
+                  <td style={td}>{t.reason || "—"}</td>
                 </tr>
               ))}
             </tbody>

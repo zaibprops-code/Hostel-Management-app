@@ -284,6 +284,47 @@ router.post(
   })
 );
 
+// PUT /api/residents/:id/deposit — edit the security deposit held: set it to an
+// exact amount (e.g. fix a wrong entry, or undo rent that was converted into
+// deposit). The difference is logged on the deposit ledger as a signed DEPOSIT
+// correction so the history stays traceable. A deposit already settled at
+// checkout (refunded / forfeited) can't be edited.
+router.put(
+  "/:id/deposit",
+  requirePermission("payments.manage"),
+  validateBody(z.object({
+    amount: z.coerce.number().min(0),
+    method: z.enum(["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"]).optional(),
+    reason: z.string().optional(),
+  })),
+  asyncHandler(async (req, res) => {
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { deposit: true } });
+    if (!resident) throw notFound("Resident not found");
+    await assertHostelAccess(req, resident.hostelId);
+    const existing = resident.deposit;
+    if (existing && existing.status !== "HELD") throw badRequest("This deposit was already settled at checkout and can't be edited.");
+    const { amount, method, reason } = req.body;
+    const before = existing ? dec(existing.amount) : 0;
+    const diff = amount - before;
+
+    if (!existing && amount <= 0) return res.json({ id: null, amount: 0 });
+
+    const deposit = await prisma.$transaction(async (tx) => {
+      const dep = existing
+        ? await tx.securityDeposit.update({ where: { id: existing.id }, data: { amount, ...(method ? { method } : {}) } })
+        : await tx.securityDeposit.create({ data: { hostelId: resident.hostelId, residentId: resident.id, amount, method: method ?? "CASH", status: "HELD" } });
+      if (Math.abs(diff) > 0.001) {
+        await tx.depositTransaction.create({
+          data: { depositId: dep.id, type: "DEPOSIT", amount: diff, reason: reason || `Deposit corrected: ${before} → ${amount}` },
+        });
+      }
+      return dep;
+    });
+    await audit({ userId: req.auth!.id, action: "deposit.edit", entity: "SecurityDeposit", entityId: deposit.id, hostelId: resident.hostelId, oldValue: { amount: before }, newValue: { amount } });
+    res.json({ id: deposit.id, amount: dec(deposit.amount) });
+  })
+);
+
 // Move `amount` of a resident's unallocated payment credit into their security
 // deposit: tie that money to non-rent allocations (so it stops counting as rent
 // advance) and record it on the deposit ledger. Used when an overpaid month is
