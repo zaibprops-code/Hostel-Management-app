@@ -7,6 +7,7 @@ import { usePrompt } from "../context/PromptContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
 import { formatPKR } from "../lib/format";
+import { Link } from "react-router-dom";
 import { dueWindow } from "../lib/rent";
 import { qrSvg } from "../lib/qr";
 import { IconHostel, IconPlus } from "../components/icons";
@@ -180,6 +181,13 @@ export default function HostelsPage() {
                 <div className="flex justify-between"><span className="text-slate-400">Property rent</span><span className="font-medium text-slate-700">{formatPKR(h.propertyRent)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">Property deposit</span><span className="font-medium text-slate-700">{formatPKR(h.propertyDeposit)}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">Contact</span><span className="font-medium text-slate-700">{h.contactNumber ?? "—"}</span></div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-400">Rent due</span>
+                  <span className="font-medium text-slate-700">
+                    {dueWindow(h.rentDueDay ?? 5)} of each month
+                    {manage && <Link to="/settings#rent" className="ml-2 text-xs font-medium text-brand-600">Change</Link>}
+                  </span>
+                </div>
               </div>
               {manage && (
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">

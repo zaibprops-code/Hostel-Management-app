@@ -6,7 +6,7 @@ import { asyncHandler, badRequest, conflict, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
-import { catchUpRent, generateDueRent, redateOpenCharges, rentCycle, computeStatus, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, applyResidentAdvances } from "../lib/rent";
+import { catchUpRent, generateDueRent, redateOpenCharges, rentCycle, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, resetCharge, switchToCalendar } from "../lib/rent";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -308,9 +308,21 @@ router.patch(
     if (req.body.monthlyRent != null) data.monthlyRent = req.body.monthlyRent;
     if (req.body.billingMode) data.billingMode = req.body.billingMode;
     if (req.body.billingDay !== undefined) data.billingDay = req.body.billingDay;
-    const resident = await prisma.resident.update({ where: { id: before.id }, data });
-    // A new due day / cycle moves the months still unpaid to match.
-    if (data.billingMode || data.billingDay !== undefined) await redateOpenCharges(prisma, { residentId: resident.id });
+    // Join-day cycle → calendar months: cut the current cycle at month end so
+    // no days are billed twice (handled by switchToCalendar).
+    const toCalendar = before.billingMode === "ANCHORED" && req.body.billingMode === "CALENDAR";
+    const resident = await prisma.$transaction(async (tx) => {
+      const { billingMode: _m, billingDay: _d, ...rest } = data;
+      const plain = toCalendar ? rest : data;
+      if (Object.keys(plain).length) await tx.resident.update({ where: { id: before.id }, data: plain });
+      if (toCalendar) {
+        await switchToCalendar(tx, before.id, req.body.billingDay ?? null);
+      } else if (data.billingMode || data.billingDay !== undefined) {
+        // A new due day / cycle moves the months still unpaid to match.
+        await redateOpenCharges(tx, { residentId: before.id });
+      }
+      return tx.resident.findUniqueOrThrow({ where: { id: before.id } });
+    });
     await audit({ userId: req.auth!.id, action: "resident.billing", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, newValue: data });
     res.json({ id: resident.id, monthlyRent: dec(resident.monthlyRent), billingMode: resident.billingMode, billingDay: resident.billingDay });
   })
@@ -386,81 +398,6 @@ router.put(
     res.json({ id: deposit.id, amount: dec(deposit.amount) });
   })
 );
-
-// Move `amount` of a resident's unallocated payment credit into their security
-// deposit: tie that money to non-rent allocations (so it stops counting as rent
-// advance) and record it on the deposit ledger. Used when an overpaid month is
-// pro-rated and the extra should be held as deposit rather than credited ahead.
-async function moveCreditToDeposit(tx: any, resident: { id: string; hostelId: string }, amount: number): Promise<void> {
-  if (amount <= 0.001) return;
-  const payments = await tx.payment.findMany({
-    where: { residentId: resident.id, status: "COMPLETED" },
-    orderBy: { paidAt: "asc" },
-    include: { allocations: true },
-  });
-  let remaining = amount;
-  for (const p of payments) {
-    if (remaining <= 0.001) break;
-    const avail = Number(p.amount) - p.allocations.reduce((s: number, a: any) => s + Number(a.amount), 0);
-    if (avail <= 0.001) continue;
-    const take = Math.min(avail, remaining);
-    // A null rentChargeId allocation = money applied to something other than rent.
-    await tx.paymentAllocation.create({ data: { paymentId: p.id, rentChargeId: null, amount: take } });
-    remaining -= take;
-  }
-  const moved = amount - remaining;
-  if (moved <= 0.001) return;
-  const existing = await tx.securityDeposit.findUnique({ where: { residentId: resident.id } });
-  const dep = existing
-    ? await tx.securityDeposit.update({ where: { id: existing.id }, data: { amount: dec(existing.amount) + moved, status: "HELD" } })
-    : await tx.securityDeposit.create({ data: { hostelId: resident.hostelId, residentId: resident.id, amount: moved, method: "CASH", status: "HELD" } });
-  await tx.depositTransaction.create({ data: { depositId: dep.id, type: "DEPOSIT", amount: moved, reason: "Converted from overpaid rent" } });
-}
-
-// Set a rent charge's amount / discount / due date / note. If more is already
-// paid against it than the new net, the excess is freed (newest allocations
-// first) and goes where `excessTo` says: the security deposit, or advance
-// credit that settles the coming months.
-async function resetCharge(
-  tx: any,
-  resident: { id: string; hostelId: string },
-  charge: { id: string; amountPaid: unknown; allocations: { id: string; amount: unknown }[] },
-  next: { amount: number; discount: number; dueDate: Date; notes: string | null; excessTo: "deposit" | "credit" }
-): Promise<void> {
-  const net = Math.max(0, next.amount - next.discount);
-  let paid = dec(charge.amountPaid as any);
-  if (paid > net) {
-    let excess = paid - net;
-    const allocs = [...charge.allocations].sort((a, b) => b.id.localeCompare(a.id));
-    for (const a of allocs) {
-      if (excess <= 0.001) break;
-      const amt = dec(a.amount as any);
-      const cut = Math.min(amt, excess);
-      if (cut >= amt - 0.001) await tx.paymentAllocation.delete({ where: { id: a.id } });
-      else await tx.paymentAllocation.update({ where: { id: a.id }, data: { amount: amt - cut } });
-      excess -= cut;
-      paid -= cut;
-    }
-  }
-  const waived = next.discount > 0 && net <= 0.001 && paid <= 0.001;
-  await tx.rentCharge.update({
-    where: { id: charge.id },
-    data: {
-      amount: next.amount, discount: next.discount, amountPaid: paid, dueDate: next.dueDate,
-      status: waived ? "WAIVED" : computeStatus(next.amount, next.discount, paid, next.dueDate),
-      notes: next.notes,
-    },
-  });
-  const freed = Math.max(0, dec(charge.amountPaid as any) - paid);
-  if (freed > 0.001 && next.excessTo !== "credit") {
-    // Overpaid rent turns into security deposit — next month stays billable
-    // in full (the resident does not get a rent discount for paying early).
-    await moveCreditToDeposit(tx, resident, freed);
-  } else {
-    // Keep it as advance credit against the coming months.
-    await applyResidentAdvances(tx, resident.id);
-  }
-}
 
 // POST /api/residents/:id/charges/:chargeId/adjust — make a single month's rent
 // flexible: change its amount (e.g. pro-rate the join month), apply a discount,

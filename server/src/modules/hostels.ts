@@ -6,7 +6,7 @@ import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, accessibleHostelIds, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
-import { redateOpenCharges } from "../lib/rent";
+import { redateOpenCharges, residentDueDay, switchToCalendar } from "../lib/rent";
 
 const router = Router();
 
@@ -72,6 +72,77 @@ router.get(
       select: { id: true, name: true, code: true, city: true, rentDueDay: true },
     });
     res.json(hostels);
+  })
+);
+
+// ---- Rent due dates ------------------------------------------------------
+// Each hostel has one rent due date ("due 1st–5th"). Residents follow it
+// unless they have their own due day or a join-day (anchored) cycle — those
+// are listed as exceptions so they can be brought in line in one step.
+
+const CURRENT = ["ACTIVE", "NOTICE_GIVEN"] as const;
+
+// GET /api/hostels/rent-settings — every accessible hostel's due day, how many
+// monthly residents follow it, and who doesn't.
+router.get(
+  "/rent-settings",
+  requirePermission("hostels.view"),
+  asyncHandler(async (req, res) => {
+    const ids = await accessibleHostelIds(req);
+    const [hostels, residents] = await Promise.all([
+      prisma.hostel.findMany({ where: { id: { in: ids } }, orderBy: { name: "asc" }, select: { id: true, name: true, rentDueDay: true } }),
+      prisma.resident.findMany({
+        where: { hostelId: { in: ids }, status: { in: [...CURRENT] }, occupantType: { not: "DAILY" }, bedId: { not: null } },
+        select: { id: true, fullName: true, hostelId: true, billingMode: true, billingDay: true, admissionDate: true },
+        orderBy: { fullName: "asc" },
+      }),
+    ]);
+    res.json(hostels.map((h) => {
+      const mine = residents.filter((r) => r.hostelId === h.id);
+      const exceptions = mine
+        .filter((r) => r.billingMode === "ANCHORED" || r.billingDay != null)
+        .map((r) => ({ id: r.id, fullName: r.fullName, billingMode: r.billingMode, dueDay: residentDueDay(r, h.rentDueDay) }));
+      return { id: h.id, name: h.name, rentDueDay: h.rentDueDay, residents: mine.length, following: mine.length - exceptions.length, exceptions };
+    }));
+  })
+);
+
+// PUT /api/hostels/:id/rent-settings — set the hostel's rent due day. With
+// applyToAll, residents with their own due day or a join-day cycle switch to
+// the hostel's calendar due date too. Every unpaid month of the residents who
+// follow it moves to the new day.
+router.put(
+  "/:id/rent-settings",
+  requirePermission("hostels.manage"),
+  validateBody(z.object({ rentDueDay: z.coerce.number().int().min(1).max(28), applyToAll: z.coerce.boolean().default(false) })),
+  asyncHandler(async (req, res) => {
+    await assertHostelAccess(req, req.params.id);
+    const before = await prisma.hostel.findUnique({ where: { id: req.params.id }, select: { id: true, rentDueDay: true } });
+    if (!before) throw notFound("Hostel not found");
+    const { rentDueDay, applyToAll } = req.body as { rentDueDay: number; applyToAll: boolean };
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.hostel.update({ where: { id: before.id }, data: { rentDueDay } });
+      const current = { hostelId: before.id, status: { in: [...CURRENT] }, occupantType: { not: "DAILY" as const } };
+      let aligned = 0;
+      if (applyToAll) {
+        // Calendar residents with their own day simply drop it.
+        const r = await tx.resident.updateMany({ where: { ...current, billingMode: "CALENDAR", billingDay: { not: null } }, data: { billingDay: null } });
+        aligned = r.count;
+      }
+      const moved = await redateOpenCharges(tx, { hostelId: before.id });
+      if (applyToAll) {
+        // Join-day cycle residents switch to calendar months: their current
+        // cycle is cut at month end so no days are charged twice.
+        const anchored = await tx.resident.findMany({ where: { ...current, billingMode: "ANCHORED" }, select: { id: true } });
+        for (const a of anchored) await switchToCalendar(tx, a.id, null);
+        aligned += anchored.length;
+      }
+      return { aligned, moved };
+    }, { timeout: 30000 });
+
+    await audit({ userId: req.auth!.id, action: "hostel.rentSettings", entity: "Hostel", entityId: before.id, hostelId: before.id, oldValue: { rentDueDay: before.rentDueDay }, newValue: { rentDueDay, applyToAll, ...result } });
+    res.json({ rentDueDay, ...result });
   })
 );
 

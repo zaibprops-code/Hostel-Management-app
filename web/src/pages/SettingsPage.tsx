@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api, apiError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Input, ErrorText } from "../components/ui";
+import RentDueSettings from "../components/RentDueSettings";
 
 function mb(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
@@ -10,7 +12,12 @@ function mb(bytes: number): string {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const location = useLocation();
+  // Deep link from a hostel card: /settings#rent
+  useEffect(() => {
+    if (location.hash === "#rent") setTimeout(() => document.getElementById("rent")?.scrollIntoView({ behavior: "smooth" }), 300);
+  }, [location.hash]);
   const { data: storage } = useApi<any>("/storage");
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [msg, setMsg] = useState(""); const [error, setError] = useState(""); const [saving, setSaving] = useState(false);
@@ -27,8 +34,9 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Profile & security" />
+      <PageHeader title="Settings" subtitle="Rent, profile & security" />
       <div className="grid gap-4 lg:grid-cols-2">
+        {can("hostels.view") && <RentDueSettings />}
         <Card className="p-6">
           <h3 className="font-semibold text-slate-800 mb-4">Profile</h3>
           <div className="flex items-center gap-4 mb-4">

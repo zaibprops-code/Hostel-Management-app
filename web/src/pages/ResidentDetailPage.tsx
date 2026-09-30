@@ -12,7 +12,7 @@ import { uploadFile } from "../lib/upload";
 import { formatPKR, formatDate, formatDateTime, titleCase } from "../lib/format";
 import { elementToPdf } from "../lib/pdfExport";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
-import { firstMonthPlan, periodLabel, formatPerDay, dueWindow, MONTHS } from "../lib/rent";
+import { firstMonthPlan, periodLabel, formatPerDay, dueWindow, ordinal, MONTHS } from "../lib/rent";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
 import MoveResidentModal from "../components/MoveResidentModal";
 
@@ -483,7 +483,7 @@ export default function ResidentDetailPage() {
                   <p className="text-xs text-slate-400">
                     {r.billingMode === "ANCHORED"
                       ? `Billed every month on day ${r.rentCycle.dueDay} (their join day).`
-                      : `Calendar month — rent due ${dueWindow(r.rentCycle.dueDay)} of each month.`}
+                      : `Calendar month — rent due ${dueWindow(r.rentCycle.dueDay)} of each month${r.billingDay ? " (own due date)" : ""}.`}
                     {r.proratedFirst ? " First month was pro-rated." : ""}
                   </p>
                 </div>
@@ -745,9 +745,18 @@ export default function ResidentDetailPage() {
             <option value="CALENDAR">Calendar month (due by the hostel's rent day)</option>
             <option value="ANCHORED">Every month on the join day</option>
           </Select>
-          <Input label="Rent due by — day of month (optional)" type="number" min={1} max={28} value={termsForm.billingDay}
-            onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })} placeholder={`Hostel default: ${dueWindow(r.hostel?.rentDueDay ?? 5)}`} />
-          <p className="text-xs text-slate-400">New rent applies to future months. To change a month already charged, use <b>Adjust</b> on that row.</p>
+          <Select label="Rent due date" value={termsForm.billingDay === "" || termsForm.billingDay == null ? "" : String(termsForm.billingDay)}
+            onChange={(e) => setTermsForm({ ...termsForm, billingDay: e.target.value })}>
+            <option value="">
+              {termsForm.billingMode === "ANCHORED"
+                ? `Their join day (the ${ordinal(Math.min(new Date(r.admissionDate).getDate() || 1, 28))})`
+                : `Hostel's due date — ${dueWindow(r.hostel?.rentDueDay ?? 5)} (recommended)`}
+            </option>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>Own date for this resident: by the {ordinal(d)}</option>)}
+          </Select>
+          <p className="text-xs text-slate-400">
+            Keep the hostel's due date so a change in <b>Settings → Rent due dates</b> applies to this resident automatically. New rent applies to future months; to change a month already charged, use <b>Adjust</b> on that row.
+          </p>
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setTerms(false)}>Cancel</Button><Button loading={saving} onClick={saveTerms}>Save</Button></div>
         </div>
