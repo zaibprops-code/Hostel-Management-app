@@ -33,7 +33,11 @@ export function amountInWords(value: number | undefined | null): string {
 
 export function formatDate(value?: string | Date | null): string {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  // A date-only value (e.g. a rent due date "2026-09-10") is a calendar day, not
+  // an instant — read it as local so it never shifts a day across time zones.
+  const m = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function formatDateTime(value?: string | Date | null): string {

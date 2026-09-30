@@ -26,6 +26,8 @@ export async function ensureRentCharge(
     month: number; // 1-12
     amount: number;
     dueDay: number;
+    dueDate?: Date; // overrides dueDay (e.g. a join month due on the next rent day)
+    notes?: string;
   }
 ) {
   const existing = await tx.rentCharge.findUnique({
@@ -40,7 +42,7 @@ export async function ensureRentCharge(
   if (existing) return existing;
 
   // End of the due day so rent is "overdue" only AFTER that day (due-by inclusive).
-  const dueDate = new Date(params.year, params.month - 1, Math.min(params.dueDay, 28), 23, 59, 59);
+  const dueDate = params.dueDate ?? endOfDay(params.year, params.month - 1, Math.min(params.dueDay, 28));
   return tx.rentCharge.create({
     data: {
       hostelId: params.hostelId,
@@ -49,24 +51,76 @@ export async function ensureRentCharge(
       periodMonth: params.month,
       amount: params.amount,
       dueDate,
+      notes: params.notes,
       status: computeStatus(params.amount, 0, 0, dueDate),
     },
   });
 }
+
+// Last second of a calendar day (m0 is 0-11; overflow rolls into next year).
+function endOfDay(y: number, m0: number, d: number): Date {
+  return new Date(y, m0, d, 23, 59, 59);
+}
+
+// The calendar day a stored date falls on, as YYYY-MM-DD. Due dates are sent to
+// the UI in this form so they never shift a day across time zones.
+export function ymd(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Days in a given month (m is 1-12).
 export function daysInMonth(y: number, m: number): number {
   return new Date(y, m, 0).getDate();
 }
 
-// Pro-rated rent for the partial first calendar month: from the join day to the
-// end of that month (inclusive), by actual days.
-export function proratedFirstAmount(admissionDate: Date, monthlyRent: number): number {
+// Pro-rata for the join month: the resident pays only for the days they stay,
+// from the join day to the end of that month (both inclusive). The daily rate
+// is the monthly rent spread over the actual days in THAT month, so joining on
+// the 20th of a 31-day month at ₨22,000 → 12 days × ₨709.68 = ₨8,516.
+export interface ProRata {
+  fromDay: number;     // join day
+  toDay: number;       // last day of the month
+  days: number;        // days billed
+  daysInMonth: number;
+  perDay: number;      // monthly rent ÷ days in month (unrounded)
+  amount: number;      // rounded to whole rupees
+}
+export function proRata(admissionDate: Date, monthlyRent: number): ProRata {
   const y = admissionDate.getFullYear();
   const m = admissionDate.getMonth() + 1;
   const dim = daysInMonth(y, m);
-  const remaining = dim - admissionDate.getDate() + 1;
-  return Math.round((monthlyRent * remaining) / dim);
+  const fromDay = admissionDate.getDate();
+  const days = dim - fromDay + 1;
+  return { fromDay, toDay: dim, days, daysInMonth: dim, perDay: monthlyRent / dim, amount: Math.round((monthlyRent * days) / dim) };
+}
+export function proratedFirstAmount(admissionDate: Date, monthlyRent: number): number {
+  return proRata(admissionDate, monthlyRent).amount;
+}
+// Human-readable breakdown stored on the pro-rated charge, e.g.
+// "Pro-rata: 12 of 31 days (20–31 Aug) × ₨709.68/day".
+export function proRataNote(admissionDate: Date, monthlyRent: number): string {
+  const p = proRata(admissionDate, monthlyRent);
+  const mon = MONTHS[admissionDate.getMonth()];
+  const perDay = p.perDay.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return `Pro-rata: ${p.days} of ${p.daysInMonth} days (${p.fromDay}–${p.toDay} ${mon}) × ₨${perDay}/day`;
+}
+
+// When the very first charge falls due. It is never before the join day:
+//   • CALENDAR — the first rent day on/after joining. Join on the 5th with rent
+//     due by the 10th → due the 10th; join on the 20th → due the 10th of next
+//     month (together with that month's rent). Collecting at admission is
+//     optional; if nothing is collected the amount simply waits until then.
+//   • ANCHORED — the cycle starts on the join day, so it's due that day.
+export function firstChargeDueDate(mode: string, admissionDate: Date, dueDay: number): Date {
+  const y = admissionDate.getFullYear();
+  const m0 = admissionDate.getMonth();
+  const joinDay = admissionDate.getDate();
+  if (mode === "ANCHORED") return endOfDay(y, m0, joinDay);
+  const day = Math.min(dueDay || 10, 28);
+  return joinDay <= day ? endOfDay(y, m0, day) : endOfDay(y, m0 + 1, day);
 }
 
 // The amount of a resident's VERY FIRST rent charge, honouring the cycle mode
@@ -124,34 +178,58 @@ export async function generateDueRent(prisma: PrismaClient, hostelIds?: string[]
     const hostelDay = dueDayOf.get(r.hostelId) ?? 10;
     const dueDay = residentDueDay(r, hostelDay);
 
-    const ensure = async (y: number, m: number, amount: number, due: number) => {
+    const ensure = async (y: number, m: number, amount: number, due: number, extra: { dueDate?: Date; notes?: string } = {}) => {
       const before = await prisma.rentCharge.findUnique({
         where: { residentId_periodYear_periodMonth: { residentId: r.id, periodYear: y, periodMonth: m } },
       });
       if (before) return;
-      await ensureRentCharge(prisma, { hostelId: r.hostelId, residentId: r.id, year: y, month: m, amount, dueDay: due });
+      await ensureRentCharge(prisma, { hostelId: r.hostelId, residentId: r.id, year: y, month: m, amount, dueDay: due, ...extra });
       created++;
     };
+
+    const firstY = admission.getFullYear();
+    const firstM = admission.getMonth() + 1;
+    const firstDue = firstChargeDueDate(r.billingMode, admission, dueDay);
 
     if (r.billingMode === "ANCHORED") {
       const anchorDay = Math.min(admission.getDate(), 28);
       for (let k = 0; ; k++) {
-        const cs = new Date(admission.getFullYear(), admission.getMonth() + k, 1);
+        const cs = new Date(firstY, firstM - 1 + k, 1);
         if (!started(cs.getFullYear(), cs.getMonth())) break;
-        await ensure(cs.getFullYear(), cs.getMonth() + 1, rent, anchorDay);
+        await ensure(cs.getFullYear(), cs.getMonth() + 1, rent, anchorDay, k === 0 ? { dueDate: firstDue } : {});
       }
     } else {
-      const firstY = admission.getFullYear();
-      const firstM = admission.getMonth() + 1;
       const cursor = new Date(firstY, firstM - 1, 1);
       while (started(cursor.getFullYear(), cursor.getMonth())) {
         const y = cursor.getFullYear();
         const m = cursor.getMonth() + 1;
-        const isFirst = y === firstY && m === firstM;
-        const amount = isFirst && r.proratedFirst ? proratedFirstAmount(admission, rent) : rent;
-        await ensure(y, m, amount, dueDay);
+        if (y === firstY && m === firstM) {
+          const pr = r.proratedFirst && admission.getDate() > 1;
+          await ensure(y, m, pr ? proratedFirstAmount(admission, rent) : rent, dueDay, {
+            dueDate: firstDue,
+            notes: pr ? proRataNote(admission, rent) : undefined,
+          });
+        } else {
+          await ensure(y, m, rent, dueDay);
+        }
         cursor.setMonth(cursor.getMonth() + 1);
       }
+    }
+
+    // Repair: a join-month charge must never fall due before the resident
+    // joined (older records were due on the month's rent day even when they
+    // joined after it, so they showed "overdue" from day one).
+    const joinCharge = await prisma.rentCharge.findUnique({
+      where: { residentId_periodYear_periodMonth: { residentId: r.id, periodYear: firstY, periodMonth: firstM } },
+    });
+    if (joinCharge && joinCharge.dueDate < new Date(firstY, firstM - 1, admission.getDate()) && joinCharge.status !== "WAIVED") {
+      await prisma.rentCharge.update({
+        where: { id: joinCharge.id },
+        data: {
+          dueDate: firstDue,
+          status: computeStatus(Number(joinCharge.amount), Number(joinCharge.discount), Number(joinCharge.amountPaid), firstDue),
+        },
+      });
     }
 
     // Sweep any advance credit (money paid but not yet tied to a charge) onto
@@ -211,8 +289,10 @@ export async function applyResidentAdvances(db: Tx, residentId: string): Promise
 // Generate this month's rent charges lazily on read, at most once per hostel per
 // month (there is no cron in this deployment). Cheap and idempotent.
 const lastRentRun = new Map<string, string>();
+const lastOverdueSweep = new Map<string, number>();
 export async function catchUpRent(prisma: PrismaClient, hostelIds: string[]): Promise<void> {
   const now = new Date();
+  await markOverdue(prisma, hostelIds, now);
   const ym = `${now.getFullYear()}-${now.getMonth() + 1}`;
   const todo = hostelIds.filter((id) => lastRentRun.get(id) !== ym);
   if (todo.length === 0) return;
@@ -220,15 +300,29 @@ export async function catchUpRent(prisma: PrismaClient, hostelIds: string[]): Pr
   try { await generateDueRent(prisma, todo); } catch { for (const id of todo) lastRentRun.delete(id); }
 }
 
+// A charge's stored status is set when it's created or paid; once its due date
+// passes unpaid it must read OVERDUE. Swept at most hourly per hostel.
+async function markOverdue(prisma: PrismaClient, hostelIds: string[], now: Date): Promise<void> {
+  const todo = hostelIds.filter((id) => now.getTime() - (lastOverdueSweep.get(id) ?? 0) > 3600_000);
+  if (todo.length === 0) return;
+  for (const id of todo) lastOverdueSweep.set(id, now.getTime());
+  try {
+    await prisma.rentCharge.updateMany({
+      where: { hostelId: { in: todo }, status: "PENDING", dueDate: { lt: now } },
+      data: { status: "OVERDUE" },
+    });
+  } catch { for (const id of todo) lastOverdueSweep.delete(id); }
+}
+
 // Summarise a monthly resident's rent cycle for the UI.
 export interface RentCycle {
   dueDay: number;
   status: "PAID" | "DUE" | "OVERDUE";
-  nextDueDate: string; // ISO — when the next/most-overdue rent is due
+  nextDueDate: string; // YYYY-MM-DD — when the next/most-overdue rent is due
   outstandingMonths: number;
 }
 export function rentCycle(
-  charges: { periodYear: number; periodMonth: number; amount: number; discount: number; amountPaid: number }[],
+  charges: { periodYear: number; periodMonth: number; amount: number; discount: number; amountPaid: number; dueDate?: Date }[],
   dueDay: number,
   now = new Date()
 ): RentCycle {
@@ -238,15 +332,17 @@ export function rentCycle(
     .sort((a, b) => a.periodYear - b.periodYear || a.periodMonth - b.periodMonth);
   if (unpaid.length === 0) {
     // Everything paid — next rent is next month, due by `day`.
-    const next = new Date(now.getFullYear(), now.getMonth() + 1, day, 23, 59, 59);
-    return { dueDay: day, status: "PAID", nextDueDate: next.toISOString(), outstandingMonths: 0 };
+    const next = endOfDay(now.getFullYear(), now.getMonth() + 1, day);
+    return { dueDay: day, status: "PAID", nextDueDate: ymd(next), outstandingMonths: 0 };
   }
-  const earliest = unpaid[0];
-  const dueBy = new Date(earliest.periodYear, earliest.periodMonth - 1, day, 23, 59, 59);
+  // The earliest-falling-due unpaid charge (a pro-rated join month can be due
+  // on the same day as the month after it).
+  const dueOf = (c: (typeof unpaid)[number]) => c.dueDate ?? endOfDay(c.periodYear, c.periodMonth - 1, day);
+  const dueBy = unpaid.map(dueOf).reduce((a, b) => (b < a ? b : a));
   return {
     dueDay: day,
     status: now > dueBy ? "OVERDUE" : "DUE",
-    nextDueDate: dueBy.toISOString(),
+    nextDueDate: ymd(dueBy),
     outstandingMonths: unpaid.length,
   };
 }

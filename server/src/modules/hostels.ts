@@ -68,7 +68,7 @@ router.get(
     const hostels = await prisma.hostel.findMany({
       where: { id: { in: ids } },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true, city: true },
+      select: { id: true, name: true, code: true, city: true, rentDueDay: true },
     });
     res.json(hostels);
   })

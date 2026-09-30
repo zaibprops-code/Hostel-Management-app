@@ -6,7 +6,7 @@ import { asyncHandler, badRequest, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
-import { catchUpRent, rentCycle, computeStatus, proratedFirstAmount, applyResidentAdvances } from "../lib/rent";
+import { catchUpRent, rentCycle, computeStatus, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, applyResidentAdvances } from "../lib/rent";
 import { audit } from "../lib/audit";
 
 const router = Router();
@@ -69,7 +69,7 @@ router.get(
           bed: { include: { room: true } },
           rentCharges: {
             where: { status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] } },
-            select: { periodYear: true, periodMonth: true, amount: true, discount: true, amountPaid: true },
+            select: { periodYear: true, periodMonth: true, amount: true, discount: true, amountPaid: true, dueDate: true },
           },
         },
       }),
@@ -85,7 +85,7 @@ router.get(
       data: residents.map((r) => {
         const cycle = r.occupantType === "DAILY"
           ? null
-          : rentCycle(r.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), r.billingDay ?? r.hostel.rentDueDay);
+          : rentCycle(r.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid), dueDate: c.dueDate })), r.billingDay ?? r.hostel.rentDueDay);
         return {
         id: r.id,
         fullName: r.fullName,
@@ -150,7 +150,34 @@ router.get(
 
     const cycle = resident.occupantType === "DAILY"
       ? null
-      : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid) })), resident.billingDay ?? resident.hostel.rentDueDay);
+      : rentCycle(resident.rentCharges.map((c) => ({ periodYear: c.periodYear, periodMonth: c.periodMonth, amount: dec(c.amount), discount: dec(c.discount), amountPaid: dec(c.amountPaid), dueDate: c.dueDate })), resident.billingDay ?? resident.hostel.rentDueDay);
+
+    // The join month, pro-rata: what the first month costs for only the days
+    // stayed, and whether it was billed as a full month instead (so the page
+    // can offer a one-tap fix).
+    let firstMonth = null;
+    if (resident.occupantType !== "DAILY" && resident.admissionDate) {
+      const adm = resident.admissionDate;
+      const rent = dec(resident.monthlyRent);
+      const pr = proRata(adm, rent);
+      const charge = resident.rentCharges.find((c) => c.periodYear === adm.getFullYear() && c.periodMonth === adm.getMonth() + 1);
+      const charged = charge ? dec(charge.amount) : null;
+      firstMonth = {
+        chargeId: charge?.id ?? null,
+        periodYear: adm.getFullYear(),
+        periodMonth: adm.getMonth() + 1,
+        ...pr,
+        chargedAmount: charged,
+        amountPaid: charge ? dec(charge.amountPaid) : 0,
+        dueOn: ymd(firstChargeDueDate(resident.billingMode, adm, residentDueDay(resident, resident.hostel.rentDueDay))),
+        // Billed as a full month although they joined mid-month — offered while
+        // that month is still unsettled or they joined recently (older, settled
+        // join months can still be pro-rated from the charge's Adjust).
+        canProrate: resident.billingMode === "CALENDAR" && !!charge && charge.status !== "WAIVED"
+          && pr.days < pr.daysInMonth && charged != null && Math.abs(charged - rent) < 0.5
+          && (dec(charge.amountPaid) < charged - 0.5 || Date.now() - adm.getTime() < 60 * 86400000),
+      };
+    }
 
     res.json({
       ...resident,
@@ -159,6 +186,7 @@ router.get(
       outstanding: Math.max(0, outstanding),
       advanceCredit,
       rentCycle: cycle,
+      firstMonth,
       deposit: resident.deposit
         ? {
             ...resident.deposit,
@@ -172,6 +200,7 @@ router.get(
         discount: dec(c.discount),
         amountPaid: dec(c.amountPaid),
         balance: Math.max(0, dec(c.amount) - dec(c.discount) - dec(c.amountPaid)),
+        dueOn: ymd(c.dueDate),
       })),
       payments: resident.payments.map((p) => ({ ...p, amount: dec(p.amount), proofMime: p.proofUrl ? proofMimes[p.proofUrl] ?? null : null })),
     });
@@ -373,15 +402,26 @@ router.post(
     note: z.string().optional(),
   })),
   asyncHandler(async (req, res) => {
-    const resident = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { hostel: { select: { rentDueDay: true } } } });
     if (!resident) throw notFound("Resident not found");
     await assertHostelAccess(req, resident.hostelId);
     const charge = await prisma.rentCharge.findUnique({ where: { id: req.params.chargeId }, include: { allocations: true } });
     if (!charge || charge.residentId !== resident.id) throw notFound("Charge not found");
 
     let amount = req.body.amount != null ? req.body.amount : dec(charge.amount);
-    if (req.body.prorate && resident.admissionDate) {
-      amount = proratedFirstAmount(resident.admissionDate, dec(resident.monthlyRent));
+    let dueDate = charge.dueDate;
+    let notes = req.body.note ?? charge.notes;
+    if (req.body.prorate) {
+      // Only the join month can be pro-rated: bill just the days stayed, due on
+      // the first rent day on/after joining, with the breakdown as its note.
+      const adm = resident.admissionDate;
+      if (!adm || charge.periodYear !== adm.getFullYear() || charge.periodMonth !== adm.getMonth() + 1) {
+        throw badRequest("Only the month the resident joined can be pro-rated.");
+      }
+      const rent = dec(resident.monthlyRent);
+      amount = proRata(adm, rent).amount;
+      dueDate = firstChargeDueDate(resident.billingMode, adm, residentDueDay(resident, resident.hostel.rentDueDay));
+      notes = req.body.note || proRataNote(adm, rent);
     }
     let discount = req.body.discount != null ? req.body.discount : dec(charge.discount);
     // Waive = forgive only the still-outstanding balance: discount down to what
@@ -413,10 +453,14 @@ router.post(
         where: { id: charge.id },
         data: {
           amount, discount, amountPaid: paid,
-          status: waived ? "WAIVED" : computeStatus(amount, discount, paid, charge.dueDate),
-          notes: req.body.note ?? charge.notes,
+          dueDate,
+          status: waived ? "WAIVED" : computeStatus(amount, discount, paid, dueDate),
+          notes,
         },
       });
+      if (req.body.prorate && resident.billingMode === "CALENDAR") {
+        await tx.resident.update({ where: { id: resident.id }, data: { proratedFirst: true } });
+      }
       const freed = Math.max(0, dec(charge.amountPaid) - paid);
       if (freed > 0.001 && req.body.excessTo !== "credit") {
         // Overpaid rent turns into security deposit — next month stays billable

@@ -8,6 +8,8 @@ import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select
 import { formatPKR, formatDate } from "../lib/format";
 import { IconAdmission, IconPlus, IconSearch } from "../components/icons";
 import { compressPhoto, compressDocument } from "../lib/image";
+import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
+import { firstMonthPlan, ordinal } from "../lib/rent";
 
 // Document kinds a hostel typically keeps for a resident.
 const DOC_TYPES: [string, string][] = [
@@ -40,19 +42,6 @@ function localDateTime(): string {
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 16);
 }
-// Preview of the first rent charge (mirrors the server's rules) so the owner
-// sees exactly what will be billed before admitting.
-function firstChargePreview(f: any): number {
-  const rent = f.monthlyRent || 0;
-  if (f.billingMode === "CALENDAR" && f.proratedFirst) {
-    const d = new Date(f.admissionDate);
-    if (isNaN(d.getTime())) return Math.round(rent);
-    const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    const remaining = dim - d.getDate() + 1;
-    return Math.round((rent * remaining) / dim);
-  }
-  return Math.round(rent);
-}
 
 const EMPTY = {
   // resident details
@@ -60,7 +49,7 @@ const EMPTY = {
   occupantType: "STUDENT", university: "", program: "", company: "", occupation: "",
   // admission details
   bedId: "", roomId: "", admissionDate: localDateTime(), monthlyRent: 0, depositAmount: 0,
-  rentDueDay: 1, contractMonths: 12, billingMode: "CALENDAR", proratedFirst: false, foodPlanId: "", initialPayment: 0, paymentMethod: "CASH",
+  rentDueDay: 1, contractMonths: 12, billingMode: "CALENDAR", proratedFirst: true, foodPlanId: "", initialPayment: 0, paymentMethod: "CASH",
   // daily / short-stay
   dailyRate: 0, nights: 1, guests: 1,
 };
@@ -112,6 +101,9 @@ export default function AdmissionsPage() {
 
   // Beds / rooms available in the chosen hostel.
   const hostelBeds = beds.filter((b) => !form.hostelId || b.hostelId === form.hostelId);
+  // First-month rent preview — mirrors what the server will charge.
+  const hostelDueDay = hostels.find((h) => h.id === form.hostelId)?.rentDueDay ?? 10;
+  const plan = firstMonthPlan({ admissionDate: form.admissionDate, monthlyRent: form.monthlyRent, billingMode: form.billingMode, proratedFirst: form.proratedFirst, dueDay: hostelDueDay });
   const hostelRooms = rooms.filter((r) => !form.hostelId || r.hostelId === form.hostelId);
   const selectedBed = beds.find((b) => b.id === form.bedId);
 
@@ -375,28 +367,16 @@ export default function AdmissionsPage() {
                   <NumberInput label="Contract (months)" value={form.contractMonths} onChange={(n) => setForm({ ...form, contractMonths: n })} />
 
                   <Select label="Rent cycle" value={form.billingMode} onChange={(e) => setForm({ ...form, billingMode: e.target.value })}>
-                    <option value="CALENDAR">Calendar month (1st–{form.rentDueDay || "10"}th)</option>
+                    <option value="CALENDAR">Calendar month (rent due by the {ordinal(hostelDueDay)})</option>
                     <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
                   </Select>
                   {form.billingMode === "CALENDAR" && (
-                    <Select label="First charge" value={form.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setForm({ ...form, proratedFirst: e.target.value === "PRO" })}>
-                      <option value="FULL">Charge a full month now</option>
-                      <option value="PRO">Charge only the remaining days this month (pro-rata)</option>
+                    <Select label="First month" value={form.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setForm({ ...form, proratedFirst: e.target.value === "PRO" })}>
+                      <option value="PRO">Only the days they stay (pro-rata)</option>
+                      <option value="FULL">Full month's rent</option>
                     </Select>
                   )}
-                  <div className="rounded-xl bg-brand-50 p-3 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">First charge now</span>
-                      <span className="font-bold text-brand-700">{formatPKR(firstChargePreview(form))}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {form.billingMode === "ANCHORED"
-                        ? `Then ${formatPKR(form.monthlyRent || 0)} every month on day ${new Date(form.admissionDate).getDate() || "?"}.`
-                        : form.proratedFirst
-                          ? `Pro-rated for the days left this month; then ${formatPKR(form.monthlyRent || 0)} each calendar month.`
-                          : `Then ${formatPKR(form.monthlyRent || 0)} each calendar month.`}
-                    </p>
-                  </div>
+                  <FirstMonthSummary plan={plan} monthlyRent={form.monthlyRent} billingMode={form.billingMode} dueDay={hostelDueDay} />
                 </>
               )}
 
@@ -405,7 +385,8 @@ export default function AdmissionsPage() {
                 <option value="">None</option>
                 {plans.map((p) => <option key={p.id} value={p.id}>{p.name} ({formatPKR(p.monthlyCost)})</option>)}
               </Select>
-              <MoneyInput label={form.occupantType === "DAILY" ? "Amount paid now" : "Initial payment"} value={form.initialPayment} onChange={(n) => setForm({ ...form, initialPayment: n })} />
+              <MoneyInput label={form.occupantType === "DAILY" ? "Amount paid now" : "Rent collected now (optional)"} value={form.initialPayment} onChange={(n) => setForm({ ...form, initialPayment: n })} />
+              {form.occupantType !== "DAILY" && <FirstPaymentHint plan={plan} collected={form.initialPayment} onChange={(n) => setForm({ ...form, initialPayment: n })} />}
               <Select label="Payment method" value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}>
                 {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD"].map((m) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
               </Select>

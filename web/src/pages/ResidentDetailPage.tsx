@@ -12,6 +12,8 @@ import { uploadFile } from "../lib/upload";
 import { formatPKR, formatDate, formatDateTime, titleCase } from "../lib/format";
 import { elementToPdf } from "../lib/pdfExport";
 import { downloadFile, shareFile, canShareFiles } from "../lib/download";
+import { firstMonthPlan, periodLabel, formatPerDay, MONTHS } from "../lib/rent";
+import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
@@ -29,7 +31,7 @@ export default function ResidentDetailPage() {
   const [exporting, setExporting] = useState<"" | "save" | "share" | "formSave" | "formShare">("");
   const [admitOpen, setAdmitOpen] = useState(false);
   const [availBeds, setAvailBeds] = useState<any[]>([]);
-  const [admitForm, setAdmitForm] = useState<any>({ bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: false });
+  const [admitForm, setAdmitForm] = useState<any>({ bedId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: true });
   const [pay, setPay] = useState(false);
   const [notice, setNotice] = useState(false);
   const [checkout, setCheckout] = useState(false);
@@ -44,6 +46,9 @@ export default function ResidentDetailPage() {
   const [terms, setTerms] = useState(false);
   const [termsForm, setTermsForm] = useState<any>({ monthlyRent: 0, billingMode: "CALENDAR", billingDay: "" });
   const [adjust, setAdjust] = useState<null | any>(null);
+  const [prorateOpen, setProrateOpen] = useState(false);
+  const [prorateExcess, setProrateExcess] = useState("deposit");
+  const [prorateHidden, setProrateHidden] = useState(false);
   const [adjForm, setAdjForm] = useState<any>({ amount: 0, note: "" });
   const [coForm, setCoForm] = useState<any>({ checkoutDate: new Date().toISOString().slice(0, 10), damageCharges: 0, otherCharges: 0, inspectionNotes: "" });
   const [portal, setPortal] = useState(false);
@@ -168,6 +173,21 @@ export default function ResidentDetailPage() {
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
+  // Re-bill the join month for only the days stayed (was charged in full).
+  function openProrate() { setProrateExcess("deposit"); setError(""); setProrateOpen(true); }
+  async function applyProrate() {
+    setSaving(true); setError("");
+    try {
+      await api.post(`/residents/${id}/charges/${r.firstMonth.chargeId}/adjust`, { prorate: true, excessTo: prorateExcess });
+      setProrateOpen(false); await refetch(); toast.success("First month now charged for the days stayed only.");
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+  // "Keep full month" — remembered per charge in this browser.
+  function keepFullMonth() {
+    try { localStorage.setItem(`prorate-dismissed:${r.firstMonth.chargeId}`, "1"); } catch { /* storage unavailable */ }
+    setProrateHidden(true);
+  }
+
   function openAdjust(c: any) { setAdjForm({ amount: c.amount, note: c.notes || "", excessTo: "deposit" }); setError(""); setAdjust(c); }
   async function saveAdjust(payload: any) {
     setSaving(true); setError("");
@@ -192,7 +212,7 @@ export default function ResidentDetailPage() {
     try {
       const { data } = await api.get(`/structure/available-beds?hostelId=${r.hostel.id}`);
       setAvailBeds(data);
-      setAdmitForm({ bedId: data[0]?.id ?? "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: data[0]?.monthlyRent ?? r.monthlyRent ?? 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: false });
+      setAdmitForm({ bedId: data[0]?.id ?? "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: data[0]?.monthlyRent ?? r.monthlyRent ?? 0, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH", billingMode: "CALENDAR", proratedFirst: true });
       setAdmitOpen(true);
     } catch (e) { toast.error(apiError(e)); }
   }
@@ -254,6 +274,11 @@ export default function ResidentDetailPage() {
   if (!r) return <EmptyState title="Resident not found" />;
 
   const active = r.status === "ACTIVE" || r.status === "NOTICE_GIVEN";
+  const admitPlan = firstMonthPlan({ admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, dueDay: r.hostel?.rentDueDay ?? 10 });
+  const fm = r.firstMonth;
+  let prorateDismissed = prorateHidden;
+  try { prorateDismissed ||= !!(fm?.chargeId && localStorage.getItem(`prorate-dismissed:${fm.chargeId}`)); } catch { /* storage unavailable */ }
+  const showProrate = !!fm?.canProrate && can("payments.manage") && !prorateDismissed;
   // A deposit already settled at checkout (refunded / forfeited) is locked.
   const depositEditable = !r.deposit || r.deposit.status === "HELD";
 
@@ -419,6 +444,20 @@ export default function ResidentDetailPage() {
             )}
           </div>
 
+          {showProrate && (
+            <Card className="p-4 border-amber-200 bg-amber-50/60">
+              <p className="text-sm font-semibold text-amber-900">First month charged in full</p>
+              <p className="text-sm text-amber-800 mt-1">
+                {r.fullName} joined on {fm.fromDay} {MONTHS[fm.periodMonth - 1]}, but {periodLabel(fm.periodYear, fm.periodMonth)} was charged the full {formatPKR(fm.chargedAmount)}.
+                {" "}For the {fm.days} days they stayed it comes to <b>{formatPKR(fm.amount)}</b> ({formatPerDay(fm.perDay)}/day).
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button onClick={openProrate}>Charge only {fm.days} days</Button>
+                <Button variant="secondary" onClick={keepFullMonth}>Keep full month</Button>
+              </div>
+            </Card>
+          )}
+
           {r.rentCycle && (
             <Card className={`p-5 ${r.rentCycle.status === "OVERDUE" ? "border-rose-200 bg-rose-50/40" : r.rentCycle.status === "DUE" ? "border-amber-200 bg-amber-50/40" : ""}`}>
               <div className="flex items-center justify-between gap-2">
@@ -432,7 +471,7 @@ export default function ResidentDetailPage() {
                   </p>
                 </div>
                 <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${{ PAID: "bg-emerald-100 text-emerald-700", DUE: "bg-amber-100 text-amber-700", OVERDUE: "bg-rose-100 text-rose-700" }[r.rentCycle.status as string]}`}>
-                  {{ PAID: "Paid up", DUE: "Due this month", OVERDUE: "Overdue" }[r.rentCycle.status as string]}
+                  {{ PAID: "Paid up", DUE: "Due soon", OVERDUE: "Overdue" }[r.rentCycle.status as string]}
                 </span>
               </div>
               <div className="mt-3 space-y-1 text-sm">
@@ -461,9 +500,10 @@ export default function ResidentDetailPage() {
                 <div className="lg:hidden divide-y divide-slate-100">
                   {r.rentCharges.map((c: any) => (
                     <div key={c.id} className="flex items-center justify-between gap-2 py-2.5">
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">{c.periodMonth}/{c.periodYear}</p>
-                        <p className="text-xs text-slate-400">Paid {formatPKR(c.amountPaid)} of {formatPKR(c.amount)}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-700">{periodLabel(c.periodYear, c.periodMonth)}</p>
+                        <p className="text-xs text-slate-400">Paid {formatPKR(c.amountPaid)} of {formatPKR(c.amount)} · due {formatDate(c.dueOn)}</p>
+                        {c.notes && <p className="text-[11px] text-slate-400">{c.notes}</p>}
                       </div>
                       <div className="text-right flex items-center gap-3">
                         <div>
@@ -483,13 +523,17 @@ export default function ResidentDetailPage() {
                 {/* Desktop: table */}
                 <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+                    <thead><tr className="text-left text-xs text-slate-400"><th className="py-2">Period</th><th>Due by</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                       {r.rentCharges.map((c: any) => (
                         <tr key={c.id} className="border-t border-slate-100">
-                          <td className="py-2">{c.periodMonth}/{c.periodYear}</td>
-                          <td>{formatPKR(c.amount)}</td><td>{formatPKR(c.amountPaid)}</td>
-                          <td className={c.balance > 0 ? "text-rose-600 font-medium" : ""}>{formatPKR(c.balance)}</td>
+                          <td className="py-2 pr-3">
+                            <span className="whitespace-nowrap">{periodLabel(c.periodYear, c.periodMonth)}</span>
+                            {c.notes && <p className="text-[11px] leading-snug text-slate-400 max-w-[15rem]">{c.notes}</p>}
+                          </td>
+                          <td className="whitespace-nowrap pr-3">{formatDate(c.dueOn)}</td>
+                          <td className="whitespace-nowrap pr-3">{formatPKR(c.amount)}</td><td className="whitespace-nowrap pr-3">{formatPKR(c.amountPaid)}</td>
+                          <td className={`whitespace-nowrap pr-3 ${c.balance > 0 ? "text-rose-600 font-medium" : ""}`}>{formatPKR(c.balance)}</td>
                           <td><StatusBadge status={c.status} /></td>
                           <td className="text-right">{can("payments.manage") && (
                             <span className="inline-flex gap-3">
@@ -670,8 +714,32 @@ export default function ResidentDetailPage() {
         </div>
       </Modal>
 
+      {/* Pro-rate the join month */}
+      <Modal open={prorateOpen} onClose={() => setProrateOpen(false)} title={fm ? `Charge only the days stayed — ${periodLabel(fm.periodYear, fm.periodMonth)}` : ""}>
+        {fm && (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm space-y-1">
+              <div className="flex justify-between"><span className="text-slate-500">Monthly rent</span><span className="font-medium">{formatPKR(r.monthlyRent)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Per day ({fm.daysInMonth} days in {MONTHS[fm.periodMonth - 1]})</span><span className="font-medium">{formatPerDay(fm.perDay)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Days stayed ({fm.fromDay}–{fm.toDay} {MONTHS[fm.periodMonth - 1]})</span><span className="font-medium">{fm.days}</span></div>
+              <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span className="text-slate-700 font-medium">First-month rent</span><span className="font-bold text-slate-800">{formatPKR(fm.amount)} <span className="text-xs font-normal text-slate-400 line-through ml-1">{formatPKR(fm.chargedAmount)}</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Due by</span><span className="font-medium">{formatDate(fm.dueOn)}</span></div>
+            </div>
+            {fm.amountPaid > fm.amount && (
+              <Select label={`Already paid ${formatPKR(fm.amountPaid)} — move the extra ${formatPKR(fm.amountPaid - fm.amount)} to`} value={prorateExcess} onChange={(e) => setProrateExcess(e.target.value)}>
+                <option value="deposit">Security deposit (next month still billed in full)</option>
+                <option value="credit">Advance credit (reduces next month's rent)</option>
+              </Select>
+            )}
+            <p className="text-xs text-slate-400">Later months stay at the full {formatPKR(r.monthlyRent)}.</p>
+            <ErrorText>{error}</ErrorText>
+            <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setProrateOpen(false)}>Cancel</Button><Button loading={saving} onClick={applyProrate}>Apply</Button></div>
+          </div>
+        )}
+      </Modal>
+
       {/* Adjust a month's rent charge */}
-      <Modal open={!!adjust} onClose={() => setAdjust(null)} title={adjust ? `Adjust rent — ${adjust.periodMonth}/${adjust.periodYear}` : ""}>
+      <Modal open={!!adjust} onClose={() => setAdjust(null)} title={adjust ? `Adjust rent — ${periodLabel(adjust.periodYear, adjust.periodMonth)}` : ""}>
         {adjust && (
           <div className="space-y-3">
             <div className="rounded-lg bg-slate-50 p-3 text-sm space-y-1">
@@ -684,10 +752,10 @@ export default function ResidentDetailPage() {
               <option value="credit">Advance credit (reduces next month's rent)</option>
             </Select>
             <div className="flex flex-wrap gap-2">
-              {r.admissionDate && adjust.periodMonth === new Date(r.admissionDate).getMonth() + 1 && adjust.periodYear === new Date(r.admissionDate).getFullYear() && (
-                <button type="button" onClick={() => saveAdjust({ prorate: true, excessTo: adjForm.excessTo, note: adjForm.note || "Pro-rated to join date" })}
+              {fm?.chargeId === adjust.id && fm.days < fm.daysInMonth && (
+                <button type="button" onClick={() => saveAdjust({ prorate: true, excessTo: adjForm.excessTo, note: adjForm.note || undefined })}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-brand-400 hover:text-brand-600">
-                  Pro-rate to join date ({new Date(r.admissionDate).getDate()}th)
+                  Only days stayed: {fm.days} of {fm.daysInMonth} = {formatPKR(fm.amount)}
                 </button>
               )}
               {adjust.balance > 0 && (
@@ -792,38 +860,19 @@ export default function ResidentDetailPage() {
                 <option value="ANCHORED">Every month on the join day (e.g. 12th → 12th)</option>
               </Select>
               {admitForm.billingMode === "CALENDAR" && (
-                <Select label="First charge" value={admitForm.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setAdmitForm({ ...admitForm, proratedFirst: e.target.value === "PRO" })}>
-                  <option value="FULL">Charge a full month now</option>
-                  <option value="PRO">Charge only the remaining days this month (pro-rata)</option>
+                <Select label="First month" value={admitForm.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setAdmitForm({ ...admitForm, proratedFirst: e.target.value === "PRO" })}>
+                  <option value="PRO">Only the days they stay (pro-rata)</option>
+                  <option value="FULL">Full month's rent</option>
                 </Select>
               )}
-              {(() => {
-                const rent = admitForm.monthlyRent || 0;
-                const d = new Date(admitForm.admissionDate);
-                let first = Math.round(rent);
-                if (admitForm.billingMode === "CALENDAR" && admitForm.proratedFirst && !isNaN(d.getTime())) {
-                  const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-                  first = Math.round((rent * (dim - d.getDate() + 1)) / dim);
-                }
-                return (
-                  <div className="rounded-xl bg-brand-50 p-3 text-sm">
-                    <div className="flex items-center justify-between"><span className="text-slate-600">First charge now</span><span className="font-bold text-brand-700">{formatPKR(first)}</span></div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {admitForm.billingMode === "ANCHORED"
-                        ? `Then ${formatPKR(rent)} every month on day ${isNaN(d.getTime()) ? "?" : d.getDate()}.`
-                        : admitForm.proratedFirst
-                        ? `Pro-rated for the days left this month; then ${formatPKR(rent)} each calendar month.`
-                        : `Then ${formatPKR(rent)} each calendar month.`}
-                    </p>
-                  </div>
-                );
-              })()}
+              <FirstMonthSummary plan={admitPlan} monthlyRent={admitForm.monthlyRent} billingMode={admitForm.billingMode} dueDay={r.hostel?.rentDueDay ?? 10} />
               <div className="grid grid-cols-2 gap-3">
-                <MoneyInput label="Initial payment (optional)" value={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
+                <MoneyInput label="Rent collected now (optional)" value={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
                 <Select label="Method" value={admitForm.paymentMethod} onChange={(e) => setAdmitForm({ ...admitForm, paymentMethod: e.target.value })}>
                   {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
                 </Select>
               </div>
+              <FirstPaymentHint plan={admitPlan} collected={admitForm.initialPayment} onChange={(n) => setAdmitForm({ ...admitForm, initialPayment: n })} />
             </>
           )}
           <ErrorText>{error}</ErrorText>

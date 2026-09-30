@@ -5,7 +5,7 @@ import { asyncHandler, badRequest, conflict, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
-import { ensureRentCharge, firstChargeAmount } from "../lib/rent";
+import { ensureRentCharge, firstChargeAmount, firstChargeDueDate, proRataNote } from "../lib/rent";
 import { nextReceiptNo } from "../lib/receipts";
 import { dec } from "../lib/query";
 
@@ -46,7 +46,8 @@ const admissionSchema = z
     rentDueDay: z.coerce.number().int().min(1).max(28).default(1),
     // Rent scheduling for this resident.
     billingMode: z.enum(["CALENDAR", "ANCHORED"]).default("CALENDAR"),
-    proratedFirst: z.coerce.boolean().default(false),
+    // Join month billed only for the days stayed (calendar cycles). On by default.
+    proratedFirst: z.coerce.boolean().default(true),
     contractMonths: z.coerce.number().int().min(0).optional(),
     foodPlanId: z.string().optional(),
     initialPayment: z.coerce.number().min(0).default(0),
@@ -165,23 +166,24 @@ router.post(
         },
       });
 
-      // 4. First rent charge — daily: the whole-stay total; monthly: honours the
-      // cycle mode and first-period choice (full month, or pro-rated days).
-      const firstDueDay = isDaily
-        ? body.admissionDate.getDate()
-        : body.billingMode === "ANCHORED"
-          ? Math.min(body.admissionDate.getDate(), 28)
-          : rentDueDay;
+      // 4. First rent charge — daily: the whole-stay total, due on check-in;
+      // monthly: honours the cycle mode and first-month choice (pro-rated days
+      // or a full month). It is never due before the join day — a calendar
+      // resident who joins after this month's rent day pays on the next one.
+      const prorated = !isDaily && body.billingMode === "CALENDAR" && body.proratedFirst && body.admissionDate.getDate() > 1;
       const firstAmount = isDaily
         ? chargeAmount
-        : firstChargeAmount(body.billingMode, body.proratedFirst, body.admissionDate, body.monthlyRent);
+        : firstChargeAmount(body.billingMode, prorated, body.admissionDate, body.monthlyRent);
       const charge = await ensureRentCharge(tx, {
         hostelId,
         residentId,
         year: body.admissionDate.getFullYear(),
         month: body.admissionDate.getMonth() + 1,
         amount: firstAmount,
-        dueDay: firstDueDay,
+        dueDay: body.admissionDate.getDate(),
+        // Daily stays are due on the check-in day itself (like an anchored cycle).
+        dueDate: firstChargeDueDate(isDaily ? "ANCHORED" : body.billingMode, body.admissionDate, rentDueDay),
+        notes: prorated ? proRataNote(body.admissionDate, body.monthlyRent) : undefined,
       });
 
       // 5. Security deposit (kept separate from revenue)

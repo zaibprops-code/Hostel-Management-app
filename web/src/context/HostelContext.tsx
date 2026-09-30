@@ -7,6 +7,7 @@ export interface HostelLite {
   name: string;
   code: string;
   city?: string;
+  rentDueDay?: number; // day of month monthly rent is due by
   stats?: { totalBeds: number; occupiedBeds: number; availableBeds: number; occupancyRate: number; activeResidents: number };
 }
 
