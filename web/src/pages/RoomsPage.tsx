@@ -13,6 +13,9 @@ import { IconBed, IconPlus } from "../components/icons";
 interface Bed { id: string; label: string; status: string; monthlyRent: number; resident: { id: string; fullName: string } | null }
 interface Room { id: string; name: string; capacity: number; floor: string; floorLevel: number; hostel: { id: string; name: string }; beds: Bed[] }
 
+// A room holds at most `capacity` beds.
+const hasSpace = (r: Room) => r.beds.length < r.capacity;
+
 const STATUS_STYLE: Record<string, string> = {
   AVAILABLE: "border-emerald-300 bg-emerald-50 text-emerald-700",
   OCCUPIED: "border-brand-300 bg-brand-50 text-brand-700",
@@ -31,6 +34,8 @@ export default function RoomsPage() {
   const [saving, setSaving] = useState(false);
   const [roomForm, setRoomForm] = useState<any>({ hostelId: "", name: "", capacity: 3 });
   const [bedForm, setBedForm] = useState<any>({ roomId: "", label: "", monthlyRent: 15000 });
+  const [editRoom, setEditRoom] = useState<Room | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; capacity: number }>({ name: "", capacity: 1 });
   // "Assign resident" (occupy a bed) state.
   const [assign, setAssign] = useState<null | { bed: Bed; roomName: string; hostelId: string }>(null);
   const [pool, setPool] = useState<{ id: string; fullName: string }[]>([]);
@@ -50,6 +55,29 @@ export default function RoomsPage() {
     try {
       await api.post("/structure/beds", bedForm);
       setModal(null); await refetch(); await reload();
+    } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+  }
+  // Open "Add Bed", preselecting the given room or the first one with space.
+  function openAddBed(roomId?: string) {
+    setError("");
+    setBedForm({ roomId: roomId ?? data?.find(hasSpace)?.id ?? "", label: "", monthlyRent: 15000 });
+    setModal("bed");
+  }
+  function openEditRoom(room: Room) {
+    setError("");
+    setEditForm({ name: room.name, capacity: room.capacity });
+    setEditRoom(room);
+  }
+  async function saveRoom() {
+    if (!editRoom) return;
+    if (editForm.capacity < editRoom.beds.length) {
+      setError(`This room already has ${editRoom.beds.length} beds — capacity can't be less than that. Delete a bed first.`);
+      return;
+    }
+    setSaving(true); setError("");
+    try {
+      await api.put(`/structure/rooms/${editRoom.id}`, { name: editForm.name, capacity: editForm.capacity });
+      setEditRoom(null); toast.success("Room updated."); await refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function setBedStatus(bed: Bed, status: string) {
@@ -111,8 +139,8 @@ export default function RoomsPage() {
         subtitle="Visual occupancy map"
         actions={can("rooms.manage") && (
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => { setRoomForm({ hostelId: hostels[0]?.id ?? "", name: "", capacity: 3 }); setModal("room"); }}><IconPlus className="h-4 w-4" /> Room</Button>
-            <Button onClick={() => { setBedForm({ roomId: data?.[0]?.id ?? "", label: "", monthlyRent: 15000 }); setModal("bed"); }}><IconPlus className="h-4 w-4" /> Bed</Button>
+            <Button variant="secondary" onClick={() => { setError(""); setRoomForm({ hostelId: hostels[0]?.id ?? "", name: "", capacity: 3 }); setModal("room"); }}><IconPlus className="h-4 w-4" /> Room</Button>
+            <Button onClick={() => openAddBed()}><IconPlus className="h-4 w-4" /> Bed</Button>
           </div>
         )}
       />
@@ -132,14 +160,25 @@ export default function RoomsPage() {
           {data.map((room) => (
             <Card key={room.id} className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-semibold text-slate-800">{room.name}</h3>
                   <p className="text-xs text-slate-400">{room.hostel.name} · {room.floor}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">{room.beds.filter((b) => b.status === "OCCUPIED").length}/{room.beds.length} full</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={clsx(
+                      "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      room.beds.length > room.capacity ? "bg-rose-100 text-rose-700" : room.beds.length === room.capacity ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"
+                    )}
+                    title={`${room.beds.filter((b) => b.status === "OCCUPIED").length} of ${room.beds.length} beds occupied`}
+                  >
+                    {room.beds.length}/{room.capacity} beds{room.beds.length > room.capacity ? " · over capacity" : room.beds.length === room.capacity ? " · full" : ""}
+                  </span>
                   {can("rooms.manage") && (
-                    <button onClick={() => deleteRoom(room)} className="text-xs font-medium text-slate-300 hover:text-rose-600" title="Delete room">✕</button>
+                    <>
+                      <button onClick={() => openEditRoom(room)} className="text-xs font-medium text-slate-400 hover:text-brand-600" title="Edit room">Edit</button>
+                      <button onClick={() => deleteRoom(room)} className="text-xs font-medium text-slate-300 hover:text-rose-600" title="Delete room">✕</button>
+                    </>
                   )}
                 </div>
               </div>
@@ -175,6 +214,14 @@ export default function RoomsPage() {
                     )}
                   </div>
                 ))}
+                {can("rooms.manage") && hasSpace(room) && (
+                  <button
+                    onClick={() => openAddBed(room.id)}
+                    className="rounded-lg border border-dashed border-slate-300 p-2.5 text-xs font-medium text-slate-400 hover:border-brand-400 hover:text-brand-600"
+                  >
+                    + Add bed <span className="block text-[11px] font-normal">{room.capacity - room.beds.length} of {room.capacity} free</span>
+                  </button>
+                )}
               </div>
             </Card>
           ))}
@@ -187,22 +234,60 @@ export default function RoomsPage() {
             {hostels.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </Select>
           <Input label="Room name" placeholder="Room 101" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} />
-          <NumberInput label="Capacity" value={roomForm.capacity} onChange={(n) => setRoomForm({ ...roomForm, capacity: n })} />
+          <NumberInput label="Capacity (max beds in this room)" value={roomForm.capacity} onChange={(n) => setRoomForm({ ...roomForm, capacity: Math.max(1, n) })} />
           <ErrorText>{error}</ErrorText>
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={addRoom}>Add Room</Button></div>
         </div>
       </Modal>
 
       <Modal open={modal === "bed"} onClose={() => setModal(null)} title="Add Bed">
-        <div className="space-y-3">
-          <Select label="Room" value={bedForm.roomId} onChange={(e) => setBedForm({ ...bedForm, roomId: e.target.value })}>
-            {data?.map((r) => <option key={r.id} value={r.id}>{r.hostel.name} · {r.name}</option>)}
-          </Select>
-          <Input label="Bed label" placeholder="Bed A" value={bedForm.label} onChange={(e) => setBedForm({ ...bedForm, label: e.target.value })} />
-          <MoneyInput label="Monthly rent" value={bedForm.monthlyRent} onChange={(n) => setBedForm({ ...bedForm, monthlyRent: n })} />
-          <ErrorText>{error}</ErrorText>
-          <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button><Button loading={saving} onClick={addBed}>Add Bed</Button></div>
-        </div>
+        {(() => {
+          const room = data?.find((r) => r.id === bedForm.roomId);
+          const anySpace = !!data?.some(hasSpace);
+          return (
+            <div className="space-y-3">
+              {!anySpace ? (
+                <p className="text-sm text-slate-500">Every room is at its capacity. Use <b>Edit</b> on a room to raise its capacity, or add a new room.</p>
+              ) : (
+                <>
+                  <Select label="Room" value={bedForm.roomId} onChange={(e) => setBedForm({ ...bedForm, roomId: e.target.value })}>
+                    {data?.map((r) => (
+                      <option key={r.id} value={r.id} disabled={!hasSpace(r)}>
+                        {r.hostel.name} · {r.name} — {r.beds.length}/{r.capacity} beds{hasSpace(r) ? "" : " (full)"}
+                      </option>
+                    ))}
+                  </Select>
+                  {room && <p className="text-xs text-slate-500">{room.name} has {room.capacity - room.beds.length} of {room.capacity} bed space{room.capacity === 1 ? "" : "s"} left.</p>}
+                  <Input label="Bed label" placeholder="Bed A" value={bedForm.label} onChange={(e) => setBedForm({ ...bedForm, label: e.target.value })} />
+                  <MoneyInput label="Monthly rent" value={bedForm.monthlyRent} onChange={(n) => setBedForm({ ...bedForm, monthlyRent: n })} />
+                </>
+              )}
+              <ErrorText>{error}</ErrorText>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button>
+                {anySpace && <Button loading={saving} disabled={!room || !hasSpace(room)} onClick={addBed}>Add Bed</Button>}
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      <Modal open={!!editRoom} onClose={() => setEditRoom(null)} title={editRoom ? `Edit ${editRoom.name}` : "Edit Room"}>
+        {editRoom && (
+          <div className="space-y-3">
+            <Input label="Room name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            <NumberInput label="Capacity (max beds in this room)" value={editForm.capacity} onChange={(n) => setEditForm({ ...editForm, capacity: Math.max(1, n) })} />
+            <p className="text-xs text-slate-500">
+              This room has {editRoom.beds.length} bed{editRoom.beds.length === 1 ? "" : "s"} now
+              {editRoom.beds.length > 0 ? `, so capacity must be at least ${editRoom.beds.length}` : ""}. No more beds can be added once it's full.
+            </p>
+            <ErrorText>{error}</ErrorText>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setEditRoom(null)}>Cancel</Button>
+              <Button loading={saving} disabled={!editForm.name.trim()} onClick={saveRoom}>Save</Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={!!assign} onClose={() => setAssign(null)} title={assign ? `Assign resident — ${assign.roomName} · ${assign.bed.label}` : "Assign resident"}>

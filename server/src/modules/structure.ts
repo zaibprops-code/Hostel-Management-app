@@ -53,7 +53,17 @@ router.put(
     const room = await prisma.room.findUnique({ where: { id: req.params.id } });
     if (!room) throw notFound("Room not found");
     await assertHostelAccess(req, room.hostelId);
-    const updated = await prisma.room.update({ where: { id: room.id }, data: req.body });
+    const updated = await prisma.$transaction(async (tx) => {
+      // Capacity is the most beds the room can hold — it can't drop below the
+      // beds already in it (row locked against a bed being added meanwhile).
+      await tx.$queryRaw`SELECT id FROM "Room" WHERE id = ${room.id} FOR UPDATE`;
+      const beds = await tx.bed.count({ where: { roomId: room.id } });
+      if (req.body.capacity != null && req.body.capacity < beds) {
+        throw badRequest(`${room.name} already has ${beds} beds, so its capacity can't be less than ${beds}. Delete a bed first.`);
+      }
+      return tx.room.update({ where: { id: room.id }, data: req.body });
+    });
+    await audit({ userId: req.auth!.id, action: "room.update", entity: "Room", entityId: room.id, hostelId: room.hostelId, oldValue: { name: room.name, capacity: room.capacity }, newValue: req.body });
     res.json(updated);
   })
 );
@@ -95,8 +105,18 @@ router.post(
     const room = await prisma.room.findUnique({ where: { id: req.body.roomId } });
     if (!room) throw notFound("Room not found");
     await assertHostelAccess(req, room.hostelId);
-    const bed = await prisma.bed.create({
-      data: { roomId: room.id, hostelId: room.hostelId, label: req.body.label, monthlyRent: req.body.monthlyRent },
+    // A room never holds more beds than its capacity. The room row is locked
+    // so two bed additions at once can't both slip past the check.
+    const bed = await prisma.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw<{ capacity: number }[]>`SELECT capacity FROM "Room" WHERE id = ${room.id} FOR UPDATE`;
+      const capacity = locked?.capacity ?? room.capacity;
+      const count = await tx.bed.count({ where: { roomId: room.id } });
+      if (count >= capacity) {
+        throw conflict(`${room.name} is full — its capacity is ${capacity} bed${capacity === 1 ? "" : "s"} and it already has ${count}. Increase the room's capacity to add another bed.`);
+      }
+      return tx.bed.create({
+        data: { roomId: room.id, hostelId: room.hostelId, label: req.body.label, monthlyRent: req.body.monthlyRent },
+      });
     });
     await audit({ userId: req.auth!.id, action: "bed.create", entity: "Bed", entityId: bed.id, hostelId: bed.hostelId });
     res.status(201).json(bed);
