@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useApi } from "../lib/useApi";
 import { PageHeader, Card, Button, Input, ErrorText } from "../components/ui";
 import RentDueSettings from "../components/RentDueSettings";
+import ServerSpeed from "../components/ServerSpeed";
 
 function mb(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
@@ -65,6 +66,8 @@ export default function SettingsPage() {
             <Button type="submit" loading={saving}>Update Password</Button>
           </form>
         </Card>
+
+        {can("hostels.manage") && <ServerSpeed />}
 
         {storage && (() => {
           const pct = Math.min(100, Math.round((storage.dbBytes / storage.limitBytes) * 100));

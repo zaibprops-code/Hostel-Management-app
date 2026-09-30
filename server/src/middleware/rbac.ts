@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { forbidden, unauthorized } from "../lib/http";
 import { hasPermission, Permission } from "../lib/permissions";
+import { loadAuthUser } from "./auth";
 
 // Guard a route by permission. Owner overrides are honoured via hasPermission.
 export function requirePermission(permission: Permission) {
@@ -16,9 +17,11 @@ export function requirePermission(permission: Permission) {
 
 // Returns the hostel ids the authenticated user may access. OWNER can access
 // every hostel in the company; everyone else is limited to their assignments.
+// The owner's list comes with the (cached) signed-in user, so this is free.
 export async function accessibleHostelIds(req: Request): Promise<string[]> {
   if (!req.auth) return [];
   if (req.auth.role === "OWNER") {
+    if (req.auth.companyHostelIds) return req.auth.companyHostelIds;
     const hostels = await prisma.hostel.findMany({
       where: { companyId: req.auth.companyId },
       select: { id: true },
@@ -28,10 +31,20 @@ export async function accessibleHostelIds(req: Request): Promise<string[]> {
   return req.auth.hostelIds;
 }
 
+// Re-read the user's access from the database (bypassing the short cache) —
+// used before refusing, so a hostel created or granted moments ago works.
+export async function refreshAccess(req: Request): Promise<string[]> {
+  if (!req.auth) return [];
+  const fresh = await loadAuthUser(req.auth.id);
+  if (fresh) req.auth = fresh;
+  return accessibleHostelIds(req);
+}
+
 // Ensure the user may operate on a specific hostel; throws 403 otherwise.
 export async function assertHostelAccess(req: Request, hostelId: string): Promise<void> {
   const ids = await accessibleHostelIds(req);
-  if (!ids.includes(hostelId)) {
+  if (ids.includes(hostelId)) return;
+  if (!(await refreshAccess(req)).includes(hostelId)) {
     throw forbidden("You do not have access to this hostel");
   }
 }

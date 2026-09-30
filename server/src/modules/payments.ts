@@ -111,12 +111,13 @@ router.post(
       });
 
       let remaining = body.amount;
+      const allocations: { paymentId: string; rentChargeId: string; amount: number }[] = [];
       for (const charge of charges) {
         if (remaining <= 0) break;
         const balance = dec(charge.amount) - dec(charge.discount) - dec(charge.amountPaid);
         if (balance <= 0) continue;
         const applied = Math.min(remaining, balance);
-        await tx.paymentAllocation.create({ data: { paymentId: created.id, rentChargeId: charge.id, amount: applied } });
+        allocations.push({ paymentId: created.id, rentChargeId: charge.id, amount: applied });
         const newPaid = dec(charge.amountPaid) + applied;
         await tx.rentCharge.update({
           where: { id: charge.id },
@@ -124,6 +125,7 @@ router.post(
         });
         remaining -= applied;
       }
+      if (allocations.length) await tx.paymentAllocation.createMany({ data: allocations });
       // Any unallocated remainder stays as an advance (unallocated payment).
       return created;
     });

@@ -110,20 +110,25 @@ router.get(
   })
 );
 
+// Per-resident throttle for the rent catch-up on profile views (per server
+// instance). Cleared when a resident's rent terms or stay change here.
+const RENT_SYNC_MS = 5 * 60_000;
+const lastRentSync = new Map<string, number>();
+function rentSyncDue(residentId: string): boolean {
+  const now = Date.now();
+  const at = lastRentSync.get(residentId);
+  if (at && now - at < RENT_SYNC_MS && new Date(at).getMonth() === new Date(now).getMonth()) return false;
+  if (lastRentSync.size > 5000) lastRentSync.clear();
+  lastRentSync.set(residentId, now);
+  return true;
+}
+
 // GET /api/residents/:id — full profile with financials
 router.get(
   "/:id",
   requirePermission("residents.view"),
   asyncHandler(async (req, res) => {
-    const head = await prisma.resident.findUnique({ where: { id: req.params.id }, select: { hostelId: true } });
-    if (!head) throw notFound("Resident not found");
-    await assertHostelAccess(req, head.hostelId);
-    // Bring this resident's rent up to date: any month they now owe is
-    // charged, and unpaid months past their due date read OVERDUE.
-    await generateDueRent(prisma, undefined, [req.params.id]);
-    await prisma.rentCharge.updateMany({ where: { residentId: req.params.id, status: "PENDING", dueDate: { lt: new Date() } }, data: { status: "OVERDUE" } });
-
-    const resident = await prisma.resident.findUnique({
+    const loadProfile = () => prisma.resident.findUnique({
       where: { id: req.params.id },
       include: {
         hostel: { select: { id: true, name: true, rentDueDay: true } },
@@ -139,25 +144,35 @@ router.get(
         checkout: true,
       },
     });
+    let resident = await loadProfile();
     if (!resident) throw notFound("Resident not found");
     await assertHostelAccess(req, resident.hostelId);
+    // Bring this resident's rent up to date — any month they now owe is
+    // charged and unpaid months past due read OVERDUE. That only changes at
+    // month turns / due dates (admissions and moves sync it themselves), so it
+    // runs at most every few minutes per resident instead of on every view.
+    if (rentSyncDue(resident.id)) {
+      await generateDueRent(prisma, undefined, [resident.id]);
+      await prisma.rentCharge.updateMany({ where: { residentId: resident.id, status: "PENDING", dueDate: { lt: new Date() } }, data: { status: "OVERDUE" } });
+      resident = (await loadProfile())!;
+    }
 
     const outstanding = resident.rentCharges.reduce(
       (sum, c) => sum + (dec(c.amount) - dec(c.discount) - dec(c.amountPaid)),
       0
     );
-    const proofMimes = await fileMimes(resident.payments.map((p) => p.proofUrl));
-    // Room changes, newest first (kept in the audit log).
-    const moves = await prisma.auditLog.findMany({
-      where: { entity: "Resident", entityId: resident.id, action: "resident.move" },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      include: { user: { select: { name: true } } },
-    });
-
-    // Advance credit = money paid but not yet tied to any charge (an overpayment
-    // or the leftover from a pro-rated join month) — it will settle future rent.
-    const [paidAgg, allocAgg] = await Promise.all([
+    // Independent lookups, fetched together (one round trip instead of four):
+    //  • receipt file types, • room changes (audit log, newest first),
+    //  • advance credit = money paid but not yet tied to any charge (an
+    //    overpayment or a pro-rated join month's leftover) — it settles future rent.
+    const [proofMimes, moves, paidAgg, allocAgg] = await Promise.all([
+      fileMimes(resident.payments.map((p) => p.proofUrl)),
+      prisma.auditLog.findMany({
+        where: { entity: "Resident", entityId: resident.id, action: "resident.move" },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        include: { user: { select: { name: true } } },
+      }),
       prisma.payment.aggregate({ where: { residentId: resident.id, status: "COMPLETED" }, _sum: { amount: true } }),
       prisma.paymentAllocation.aggregate({ where: { payment: { residentId: resident.id, status: "COMPLETED" } }, _sum: { amount: true } }),
     ]);

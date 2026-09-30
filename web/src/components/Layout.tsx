@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
+import { PageLoader } from "./ui";
 import {
   IconDashboard, IconHostel, IconBed, IconResidents, IconAdmission, IconMoney, IconExpense, IconIncome,
   IconChart, IconFood, IconInventory, IconBox, IconSupplier, IconStaff, IconMaintenance, IconComplaint, IconVisitor,
@@ -166,7 +167,7 @@ export default function Layout() {
 
         {/* Page content — extra bottom padding on mobile to clear the tab bar */}
         <main className="flex-1 p-4 lg:p-6 max-w-[1200px] w-full mx-auto pb-24 lg:pb-6">
-          <Outlet />
+          <Suspense fallback={<PageLoader />}><Outlet /></Suspense>
         </main>
       </div>
 

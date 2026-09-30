@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { accessibleHostelIds } from "../middleware/rbac";
+import { accessibleHostelIds, refreshAccess } from "../middleware/rbac";
 import { badRequest } from "./http";
 import { prisma } from "./prisma";
 
@@ -30,9 +30,10 @@ export async function fileMimes(urls: (string | null | undefined)[]): Promise<Re
 // can access. An optional `hostelId` query param narrows to a single hostel
 // (validated against access).
 export async function hostelScope(req: Request): Promise<{ hostelId: { in: string[] } }> {
-  const ids = await accessibleHostelIds(req);
+  let ids = await accessibleHostelIds(req);
   const requested = req.query.hostelId as string | undefined;
   if (requested) {
+    if (!ids.includes(requested)) ids = await refreshAccess(req);
     if (!ids.includes(requested)) throw badRequest("Invalid or inaccessible hostel");
     return { hostelId: { in: [requested] } };
   }

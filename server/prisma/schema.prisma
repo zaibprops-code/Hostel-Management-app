@@ -6,6 +6,10 @@ generator client {
   // Build the query engine for the local/deploy machine (Render's Node runtime
   // is standard Linux, covered by "native").
   binaryTargets = ["native"]
+  // Load `include`d relations with SQL joins in ONE query instead of one extra
+  // round trip per relation — the biggest speed-up when the database is in a
+  // different region from the server.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

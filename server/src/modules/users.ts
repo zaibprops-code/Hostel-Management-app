@@ -8,6 +8,7 @@ import { validateBody } from "../middleware/validate";
 import { requirePermission } from "../middleware/rbac";
 import { PERMISSIONS, effectivePermissions } from "../lib/permissions";
 import { audit } from "../lib/audit";
+import { invalidateAuth } from "../middleware/auth";
 
 const router = Router();
 
@@ -95,6 +96,7 @@ router.put("/:id", requirePermission("users.manage"), validateBody(updateSchema)
       await tx.userHostelAccess.createMany({ data: body.hostelIds.map((hostelId) => ({ userId: user.id, hostelId })) });
     }
   });
+  invalidateAuth(user.id); // role / permissions / access / active take effect now
   await audit({ userId: req.auth!.id, action: "user.update", entity: "User", entityId: user.id, newValue: body });
   res.json({ success: true });
 }));

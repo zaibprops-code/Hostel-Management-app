@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { api, tokenStore } from "../lib/api";
+import { clearApiCache } from "../lib/useApi";
 
 export interface AuthUser {
   id: string;
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const { data } = await api.post("/auth/login", { email, password });
+    clearApiCache(); // never show a previous account's cached pages
     tokenStore.set(data.accessToken, data.refreshToken);
     setUser(data.user);
   }
@@ -64,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     tokenStore.clear();
+    clearApiCache();
     setUser(null);
   }
 

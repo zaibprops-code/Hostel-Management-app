@@ -32,6 +32,7 @@ import portalRouter from "./modules/portal";
 import uploadsRouter from "./modules/uploads";
 import filesRouter from "./modules/files";
 import storageRouter from "./modules/storage";
+import speedRouter from "./modules/speed";
 
 export function createApp() {
   const app = express();
@@ -85,6 +86,7 @@ export function createApp() {
   // Protected routes
   app.use("/api", authenticate);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/speed", speedRouter);
   app.use("/api/hostels", hostelsRouter);
   app.use("/api/structure", structureRouter);
   app.use("/api/residents", residentsRouter);

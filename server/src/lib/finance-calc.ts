@@ -57,18 +57,37 @@ export async function profitAndLoss(hostelIds: string[], range: DateRange = {}) 
 }
 
 // Monthly revenue vs expenses trend for the last N months.
+// Three grouped queries for the whole range (not three per month), so the
+// chart costs one database round trip. Same figures as profitAndLoss per month:
+// revenue = completed payments + other income; profit = revenue − expenses.
 export async function monthlyTrend(hostelIds: string[], months = 6) {
   const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  type Row = { m: Date; total: unknown };
+  const [payments, income, expenses] = await Promise.all([
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('month', "paidAt") AS m, SUM("amount") AS total FROM "Payment"
+      WHERE "hostelId" = ANY(${hostelIds}) AND "status" = 'COMPLETED' AND "paidAt" >= ${from} AND "paidAt" <= ${to} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('month', "date") AS m, SUM("amount") AS total FROM "Income"
+      WHERE "hostelId" = ANY(${hostelIds}) AND "status" = 'ACTIVE' AND "date" >= ${from} AND "date" <= ${to} GROUP BY 1`,
+    prisma.$queryRaw<Row[]>`SELECT date_trunc('month', "date") AS m, SUM("amount") AS total FROM "Expense"
+      WHERE "hostelId" = ANY(${hostelIds}) AND "status" = 'ACTIVE' AND "date" >= ${from} AND "date" <= ${to} GROUP BY 1`,
+  ]);
+  const sumFor = (rows: Row[], y: number, m: number) =>
+    rows.filter((r) => r.m.getUTCFullYear() === y && r.m.getUTCMonth() === m).reduce((s, r) => s + Number(r.total ?? 0), 0);
+
   const result: { month: string; revenue: number; expenses: number; profit: number }[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
-    const pl = await profitAndLoss(hostelIds, { from: start, to: end });
+    const y = start.getFullYear();
+    const m = start.getMonth();
+    const revenue = sumFor(payments, y, m) + sumFor(income, y, m);
+    const spent = sumFor(expenses, y, m);
     result.push({
       month: start.toLocaleString("en-US", { month: "short", year: "2-digit" }),
-      revenue: pl.totalRevenue,
-      expenses: pl.totalExpenses,
-      profit: pl.netProfit,
+      revenue,
+      expenses: spent,
+      profit: revenue - spent,
     });
   }
   return result;

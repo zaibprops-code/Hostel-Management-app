@@ -6,6 +6,7 @@ import { asyncHandler, notFound } from "../lib/http";
 import { validateBody } from "../middleware/validate";
 import { requirePermission, accessibleHostelIds, assertHostelAccess } from "../middleware/rbac";
 import { audit } from "../lib/audit";
+import { invalidateCompanyAuth } from "../middleware/auth";
 import { redateOpenCharges, residentDueDay, switchToCalendar } from "../lib/rent";
 
 const router = Router();
@@ -30,17 +31,22 @@ router.get(
   requirePermission("hostels.view"),
   asyncHandler(async (req, res) => {
     const ids = await accessibleHostelIds(req);
-    const hostels = await prisma.hostel.findMany({
-      where: { id: { in: ids } },
-      orderBy: { name: "asc" },
-      include: { _count: { select: { beds: true, residents: true } } },
-    });
+    // Three queries for all hostels together (not three per hostel).
+    const [hostels, bedGroups, residentGroups] = await Promise.all([
+      prisma.hostel.findMany({
+        where: { id: { in: ids } },
+        orderBy: { name: "asc" },
+        include: { _count: { select: { beds: true, residents: true } } },
+      }),
+      prisma.bed.groupBy({ by: ["hostelId", "status"], where: { hostelId: { in: ids } }, _count: { _all: true } }),
+      prisma.resident.groupBy({ by: ["hostelId"], where: { hostelId: { in: ids }, status: "ACTIVE" }, _count: { _all: true } }),
+    ]);
+    const beds = (hostelId: string, status: string) => bedGroups.find((g) => g.hostelId === hostelId && g.status === status)?._count._all ?? 0;
 
-    const withStats = await Promise.all(
-      hostels.map(async (h) => {
-        const occupied = await prisma.bed.count({ where: { hostelId: h.id, status: "OCCUPIED" } });
-        const available = await prisma.bed.count({ where: { hostelId: h.id, status: "AVAILABLE" } });
-        const activeResidents = await prisma.resident.count({ where: { hostelId: h.id, status: "ACTIVE" } });
+    const withStats = hostels.map((h) => {
+        const occupied = beds(h.id, "OCCUPIED");
+        const available = beds(h.id, "AVAILABLE");
+        const activeResidents = residentGroups.find((g) => g.hostelId === h.id)?._count._all ?? 0;
         return {
           ...h,
           propertyRent: Number(h.propertyRent),
@@ -53,8 +59,7 @@ router.get(
             occupancyRate: h._count.beds ? Math.round((occupied / h._count.beds) * 100) : 0,
           },
         };
-      })
-    );
+      });
     res.json(withStats);
   })
 );
@@ -171,6 +176,7 @@ router.post(
     const hostel = await prisma.hostel.create({
       data: { ...data, companyId: req.auth!.companyId },
     });
+    invalidateCompanyAuth(req.auth!.companyId);
     await audit({ userId: req.auth!.id, action: "hostel.create", entity: "Hostel", entityId: hostel.id, hostelId: hostel.id, newValue: data });
     res.status(201).json(hostel);
   })
@@ -265,6 +271,7 @@ router.delete(
       // 4. The hostel — structure (floors/rooms/beds), menus, suppliers,
       //    purchases, inventory and access grants cascade with it.
       await tx.hostel.delete({ where: { id: hostelId } });
+      invalidateCompanyAuth(req.auth!.companyId);
       // 5. Orphaned resident-portal logins.
       if (portalUserIds.length) {
         await tx.user.deleteMany({ where: { id: { in: portalUserIds }, role: "RESIDENT" } });

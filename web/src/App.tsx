@@ -1,35 +1,61 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { ReactNode } from "react";
+import { ComponentType, ReactNode, Suspense, lazy, useEffect } from "react";
 import { useAuth } from "./context/AuthContext";
 import { PageLoader } from "./components/ui";
 import Layout from "./components/Layout";
 
+// Pages load on demand (one small file each) instead of the whole app up
+// front, so the first screen appears much sooner — especially on mobile data.
+// If a deploy replaced the files while the app was open, a missing page file is
+// fixed by reloading once.
+function lazyPage(load: () => Promise<{ default: ComponentType<any> }>) {
+  return lazy(() =>
+    load().catch((err) => {
+      if (!sessionStorage.getItem("chunk-reload")) {
+        sessionStorage.setItem("chunk-reload", "1");
+        window.location.reload();
+        return new Promise<never>(() => {});
+      }
+      throw err;
+    })
+  );
+}
+// Warm the page files in the background once the app is idle, so moving
+// between pages is instant after the first load.
+export function prefetchPages() {
+  const all = [() => import("./pages/ForgotPasswordPage"), () => import("./pages/ResetPasswordPage"), () => import("./pages/IntakePage"), () => import("./pages/DashboardPage"), () => import("./pages/HostelsPage"), () => import("./pages/RoomsPage"), () => import("./pages/ResidentDetailPage"), () => import("./pages/AdmissionsPage"), () => import("./pages/PaymentsPage"), () => import("./pages/ExpensesPage"), () => import("./pages/IncomePage"), () => import("./pages/CapitalPage"), () => import("./pages/FoodPage"), () => import("./pages/InventoryPage"), () => import("./pages/AssetsPage"), () => import("./pages/StaffPage"), () => import("./pages/MaintenancePage"), () => import("./pages/ComplaintsPage"), () => import("./pages/VisitorsPage"), () => import("./pages/NoticesPage"), () => import("./pages/ReportsPage"), () => import("./pages/UsersPage"), () => import("./pages/AuditPage"), () => import("./pages/SettingsPage"), () => import("./pages/PortalPage")];
+  const run = () => all.forEach((load) => load().catch(() => {}));
+  const w = window as any;
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 });
+  else setTimeout(run, 2000);
+}
+
 import LoginPage from "./pages/LoginPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import IntakePage from "./pages/IntakePage";
-import DashboardPage from "./pages/DashboardPage";
-import HostelsPage from "./pages/HostelsPage";
-import RoomsPage from "./pages/RoomsPage";
-import ResidentDetailPage from "./pages/ResidentDetailPage";
-import AdmissionsPage from "./pages/AdmissionsPage";
-import PaymentsPage from "./pages/PaymentsPage";
-import ExpensesPage from "./pages/ExpensesPage";
-import IncomePage from "./pages/IncomePage";
-import CapitalPage from "./pages/CapitalPage";
-import FoodPage from "./pages/FoodPage";
-import InventoryPage from "./pages/InventoryPage";
-import AssetsPage from "./pages/AssetsPage";
-import StaffPage from "./pages/StaffPage";
-import MaintenancePage from "./pages/MaintenancePage";
-import ComplaintsPage from "./pages/ComplaintsPage";
-import VisitorsPage from "./pages/VisitorsPage";
-import NoticesPage from "./pages/NoticesPage";
-import ReportsPage from "./pages/ReportsPage";
-import UsersPage from "./pages/UsersPage";
-import AuditPage from "./pages/AuditPage";
-import SettingsPage from "./pages/SettingsPage";
-import PortalPage from "./pages/PortalPage";
+const ForgotPasswordPage = lazyPage(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazyPage(() => import("./pages/ResetPasswordPage"));
+const IntakePage = lazyPage(() => import("./pages/IntakePage"));
+const DashboardPage = lazyPage(() => import("./pages/DashboardPage"));
+const HostelsPage = lazyPage(() => import("./pages/HostelsPage"));
+const RoomsPage = lazyPage(() => import("./pages/RoomsPage"));
+const ResidentDetailPage = lazyPage(() => import("./pages/ResidentDetailPage"));
+const AdmissionsPage = lazyPage(() => import("./pages/AdmissionsPage"));
+const PaymentsPage = lazyPage(() => import("./pages/PaymentsPage"));
+const ExpensesPage = lazyPage(() => import("./pages/ExpensesPage"));
+const IncomePage = lazyPage(() => import("./pages/IncomePage"));
+const CapitalPage = lazyPage(() => import("./pages/CapitalPage"));
+const FoodPage = lazyPage(() => import("./pages/FoodPage"));
+const InventoryPage = lazyPage(() => import("./pages/InventoryPage"));
+const AssetsPage = lazyPage(() => import("./pages/AssetsPage"));
+const StaffPage = lazyPage(() => import("./pages/StaffPage"));
+const MaintenancePage = lazyPage(() => import("./pages/MaintenancePage"));
+const ComplaintsPage = lazyPage(() => import("./pages/ComplaintsPage"));
+const VisitorsPage = lazyPage(() => import("./pages/VisitorsPage"));
+const NoticesPage = lazyPage(() => import("./pages/NoticesPage"));
+const ReportsPage = lazyPage(() => import("./pages/ReportsPage"));
+const UsersPage = lazyPage(() => import("./pages/UsersPage"));
+const AuditPage = lazyPage(() => import("./pages/AuditPage"));
+const SettingsPage = lazyPage(() => import("./pages/SettingsPage"));
+const PortalPage = lazyPage(() => import("./pages/PortalPage"));
 import { EmptyState } from "./components/ui";
 
 function Protected({ children, perm }: { children: ReactNode; perm?: string }) {
@@ -45,8 +71,13 @@ function Protected({ children, perm }: { children: ReactNode; perm?: string }) {
 
 export default function App() {
   const { user, loading } = useAuth();
+  useEffect(() => {
+    sessionStorage.removeItem("chunk-reload");
+    if (user) prefetchPages();
+  }, [user]);
 
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -89,6 +120,7 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 
