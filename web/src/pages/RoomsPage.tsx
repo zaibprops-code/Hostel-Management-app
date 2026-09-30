@@ -7,11 +7,24 @@ import { useAuth } from "../context/AuthContext";
 import { useHostels } from "../context/HostelContext";
 import { useApi, withQuery } from "../lib/useApi";
 import { PageHeader, Card, Button, Modal, Input, MoneyInput, NumberInput, Select, ErrorText, PageLoader, EmptyState } from "../components/ui";
-import { formatPKR } from "../lib/format";
+import { formatPKR, titleCase } from "../lib/format";
 import { IconBed, IconPlus } from "../components/icons";
+import { firstMonthPlan } from "../lib/rent";
+import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
 
 interface Bed { id: string; label: string; status: string; monthlyRent: number; resident: { id: string; fullName: string } | null }
 interface Room { id: string; name: string; capacity: number; floor: string; floorLevel: number; hostel: { id: string; name: string }; beds: Bed[] }
+
+interface PoolResident { id: string; fullName: string; phone?: string | null; status: string; pendingReview?: boolean }
+
+// Today as YYYY-MM-DD in the viewer's own time zone (for a date input).
+function localToday(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+
+const EMPTY_ASSIGN = { residentId: "", search: "", admissionDate: "", monthlyRent: 0, proratedFirst: true, depositAmount: 0, initialPayment: 0, paymentMethod: "CASH" };
 
 // A room holds at most `capacity` beds.
 const hasSpace = (r: Room) => r.beds.length < r.capacity;
@@ -38,8 +51,9 @@ export default function RoomsPage() {
   const [editForm, setEditForm] = useState<{ name: string; capacity: number }>({ name: "", capacity: 1 });
   // "Assign resident" (occupy a bed) state.
   const [assign, setAssign] = useState<null | { bed: Bed; roomName: string; hostelId: string }>(null);
-  const [pool, setPool] = useState<{ id: string; fullName: string }[]>([]);
-  const [assignForm, setAssignForm] = useState<{ residentId: string; admissionDate: string; monthlyRent: number }>({ residentId: "", admissionDate: "", monthlyRent: 0 });
+  const [pool, setPool] = useState<PoolResident[]>([]);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [assignForm, setAssignForm] = useState<typeof EMPTY_ASSIGN>(EMPTY_ASSIGN);
 
   const legend = ["AVAILABLE", "OCCUPIED", "RESERVED", "MAINTENANCE", "BLOCKED"];
 
@@ -88,31 +102,41 @@ export default function RoomsPage() {
   }
   // Open the assign dialog for an empty bed, loading residents in this hostel
   // who aren't assigned to a bed yet (registered / reserved / approved intakes).
+  // Daily guests book whole rooms, so they aren't offered for a single bed.
   async function openAssign(bed: Bed, room: Room) {
     setError("");
     setAssign({ bed, roomName: room.name, hostelId: room.hostel.id });
-    setAssignForm({ residentId: "", admissionDate: new Date().toISOString().slice(0, 10), monthlyRent: bed.monthlyRent });
+    setAssignForm({ ...EMPTY_ASSIGN, admissionDate: localToday(), monthlyRent: bed.monthlyRent });
     setPool([]);
+    setPoolLoading(true);
     try {
-      const { data } = await api.get("/residents", { params: { pageSize: 200 } });
+      const { data } = await api.get("/residents", { params: { pageSize: 200, hostelId: room.hostel.id } });
       const list = (data.data as any[]).filter(
-        (r) => !r.bed && r.hostel?.id === room.hostel.id && r.status !== "CHECKED_OUT" && r.status !== "BLACKLISTED"
+        (r) => !r.bed && r.hostel?.id === room.hostel.id && r.occupantType !== "DAILY" && r.status !== "CHECKED_OUT" && r.status !== "BLACKLISTED"
       );
-      setPool(list.map((r) => ({ id: r.id, fullName: r.fullName })));
+      setPool(list.map((r) => ({ id: r.id, fullName: r.fullName, phone: r.phone, status: r.status, pendingReview: r.pendingReview })));
     } catch (e) { toast.error(apiError(e)); }
+    finally { setPoolLoading(false); }
   }
   async function submitAssign() {
     if (!assign) return;
     if (!assignForm.residentId) { setError("Please choose a resident to assign."); return; }
     setSaving(true); setError("");
     try {
-      await api.post("/admissions", {
+      const { data: res } = await api.post("/admissions", {
         residentId: assignForm.residentId,
         bedId: assign.bed.id,
         admissionDate: assignForm.admissionDate,
         monthlyRent: assignForm.monthlyRent,
+        billingMode: "CALENDAR",
+        proratedFirst: assignForm.proratedFirst,
+        depositAmount: assignForm.depositAmount,
+        initialPayment: assignForm.initialPayment,
+        paymentMethod: assignForm.paymentMethod,
       });
-      toast.success("Resident assigned — the bed is now occupied.");
+      if (!res?.id) { setError("The bed could not be assigned. Please try again."); return; }
+      const name = pool.find((r) => r.id === assignForm.residentId)?.fullName ?? "Resident";
+      toast.success(`${name} assigned to ${assign.roomName} · ${assign.bed.label}.`);
       setAssign(null); await refetch(); await reload();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
@@ -291,27 +315,87 @@ export default function RoomsPage() {
       </Modal>
 
       <Modal open={!!assign} onClose={() => setAssign(null)} title={assign ? `Assign resident — ${assign.roomName} · ${assign.bed.label}` : "Assign resident"}>
-        <div className="space-y-3">
-          {pool.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No unassigned residents in this hostel yet. Register a resident under <b>Residents → Add</b> (or approve a pending intake submission), then come back here to give them this bed.
-            </p>
-          ) : (
-            <>
-              <Select label="Resident" value={assignForm.residentId} onChange={(e) => setAssignForm({ ...assignForm, residentId: e.target.value })}>
-                <option value="">Select a resident…</option>
-                {pool.map((r) => <option key={r.id} value={r.id}>{r.fullName}</option>)}
-              </Select>
-              <Input label="Admission date" type="date" value={assignForm.admissionDate} onChange={(e) => setAssignForm({ ...assignForm, admissionDate: e.target.value })} />
-              <MoneyInput label="Monthly rent" value={assignForm.monthlyRent} onChange={(n) => setAssignForm({ ...assignForm, monthlyRent: n })} />
-            </>
-          )}
-          <ErrorText>{error}</ErrorText>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setAssign(null)}>Cancel</Button>
-            {pool.length > 0 && <Button loading={saving} onClick={submitAssign}>Assign &amp; occupy</Button>}
-          </div>
-        </div>
+        {assign && (() => {
+          const q = assignForm.search.trim().toLowerCase();
+          const matches = pool.filter((r) => !q || r.fullName.toLowerCase().includes(q) || (r.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || "~"));
+          const chosen = pool.find((r) => r.id === assignForm.residentId);
+          const dueDay = hostels.find((h) => h.id === assign.hostelId)?.rentDueDay ?? 5;
+          const plan = firstMonthPlan({ admissionDate: assignForm.admissionDate, monthlyRent: assignForm.monthlyRent, billingMode: "CALENDAR", proratedFirst: assignForm.proratedFirst, dueDay });
+          return (
+            <div className="space-y-3">
+              {poolLoading ? (
+                <p className="text-sm text-slate-500">Loading residents…</p>
+              ) : pool.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No unassigned residents in this hostel yet. Register a resident under <b>Residents → Add</b> (or approve a pending intake submission), then come back here to give them this bed.
+                </p>
+              ) : (
+                <>
+                  {/* Searchable list (stays inside the dialog, however many residents) */}
+                  <div>
+                    <span className="label">Resident <span className="font-normal text-slate-400">· {pool.length} without a bed</span></span>
+                    <input
+                      className="input"
+                      placeholder="Search by name or phone…"
+                      value={assignForm.search}
+                      onChange={(e) => setAssignForm({ ...assignForm, search: e.target.value })}
+                    />
+                    <div className="mt-2 max-h-52 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 divide-y divide-slate-100">
+                      {matches.length === 0 ? (
+                        <p className="px-3 py-3 text-sm text-slate-400">No resident matches “{assignForm.search}”.</p>
+                      ) : matches.map((r) => {
+                        const on = r.id === assignForm.residentId;
+                        return (
+                          <button
+                            type="button"
+                            key={r.id}
+                            onClick={() => setAssignForm({ ...assignForm, residentId: r.id })}
+                            className={clsx("w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm", on ? "bg-brand-50" : "hover:bg-slate-50")}
+                          >
+                            <span className="min-w-0">
+                              <span className={clsx("block truncate font-medium", on ? "text-brand-700" : "text-slate-700")}>{r.fullName}</span>
+                              {r.phone && <span className="block text-xs text-slate-400">{r.phone}</span>}
+                            </span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className="text-[11px] text-slate-400">{r.pendingReview ? "New intake" : titleCase(r.status)}</span>
+                              <span className={clsx("h-4 w-4 rounded-full border-2", on ? "border-brand-600 bg-brand-600 shadow-[inset_0_0_0_2px_white]" : "border-slate-300")} />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="Admission date" type="date" value={assignForm.admissionDate} onChange={(e) => setAssignForm({ ...assignForm, admissionDate: e.target.value })} />
+                    <MoneyInput label="Monthly rent" value={assignForm.monthlyRent} onChange={(n) => setAssignForm({ ...assignForm, monthlyRent: n })} />
+                  </div>
+                  <Select label="First month" value={assignForm.proratedFirst ? "PRO" : "FULL"} onChange={(e) => setAssignForm({ ...assignForm, proratedFirst: e.target.value === "PRO" })}>
+                    <option value="PRO">Only the days they stay (pro-rata)</option>
+                    <option value="FULL">Full month's rent</option>
+                  </Select>
+                  <FirstMonthSummary plan={plan} monthlyRent={assignForm.monthlyRent} billingMode="CALENDAR" dueDay={dueDay} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <MoneyInput label="Security deposit" value={assignForm.depositAmount} onChange={(n) => setAssignForm({ ...assignForm, depositAmount: n })} />
+                    <MoneyInput label="Rent collected now" value={assignForm.initialPayment} onChange={(n) => setAssignForm({ ...assignForm, initialPayment: n })} />
+                  </div>
+                  <FirstPaymentHint plan={plan} collected={assignForm.initialPayment} onChange={(n) => setAssignForm({ ...assignForm, initialPayment: n })} />
+                  {(assignForm.depositAmount > 0 || assignForm.initialPayment > 0) && (
+                    <Select label="Payment method" value={assignForm.paymentMethod} onChange={(e) => setAssignForm({ ...assignForm, paymentMethod: e.target.value })}>
+                      {["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CARD", "OTHER"].map((m) => <option key={m} value={m}>{titleCase(m)}</option>)}
+                    </Select>
+                  )}
+                </>
+              )}
+              <ErrorText>{error}</ErrorText>
+              <div className="flex items-center justify-end gap-2">
+                {chosen && <span className="mr-auto min-w-0 truncate text-xs text-slate-500">Assigning <b className="text-slate-700">{chosen.fullName}</b></span>}
+                <Button variant="secondary" onClick={() => setAssign(null)}>Cancel</Button>
+                {pool.length > 0 && <Button loading={saving} disabled={!chosen} onClick={submitAssign}>Assign &amp; occupy</Button>}
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

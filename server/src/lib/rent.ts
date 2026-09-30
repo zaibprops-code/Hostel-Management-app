@@ -105,7 +105,8 @@ export function proRataNote(admissionDate: Date, monthlyRent: number): string {
   const p = proRata(admissionDate, monthlyRent);
   const mon = MONTHS[admissionDate.getMonth()];
   const perDay = p.perDay.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  return `Pro-rata: ${p.days} of ${p.daysInMonth} days (${p.fromDay}–${p.toDay} ${mon}) × ₨${perDay}/day`;
+  const span = p.fromDay === p.toDay ? `${p.fromDay}` : `${p.fromDay}–${p.toDay}`;
+  return `Pro-rata: ${p.days} of ${p.daysInMonth} day${p.days === 1 ? "" : "s"} (${span} ${mon}) × ₨${perDay}/day`;
 }
 
 // When the very first charge falls due. It is never before the join day:

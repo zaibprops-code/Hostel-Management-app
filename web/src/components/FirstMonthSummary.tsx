@@ -15,7 +15,7 @@ export function FirstMonthSummary({ plan, monthlyRent, billingMode, dueDay }: { 
       </div>
       <p className="text-xs text-slate-500">
         {plan.prorated
-          ? <>Only the days they stay: <b className="text-slate-700">{plan.days} of {plan.daysInMonth} days</b> ({plan.fromDay}–{plan.toDay} {plan.monthShort}) × {formatPerDay(plan.perDay)}/day</>
+          ? <>Only the days they stay: <b className="text-slate-700">{plan.days} of {plan.daysInMonth} days</b> ({plan.fromDay === plan.toDay ? plan.fromDay : `${plan.fromDay}–${plan.toDay}`} {plan.monthShort}) × {formatPerDay(plan.perDay)}/day</>
           : billingMode === "ANCHORED"
             ? <>Full month, {plan.fromDay} {plan.monthShort} → {plan.fromDay} next month.</>
             : <>Full month's rent for {plan.monthLabel}.</>}

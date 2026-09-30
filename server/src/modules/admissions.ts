@@ -93,6 +93,15 @@ router.post(
       if (bed.status === "MAINTENANCE" || bed.status === "BLOCKED") throw conflict(`That bed is ${bed.status.toLowerCase()} and cannot be assigned`);
     }
 
+    // A daily guest books a whole room; a monthly resident takes one bed.
+    const who = (body.resident?.fullName ?? existing?.fullName) || "This resident";
+    if (isDaily && body.bedId && !body.roomId) {
+      throw badRequest(`${who} is registered as a daily guest, and daily guests book a whole room. Book them from Admissions → Daily guest, or change their type to Student / Professional to give them this bed.`);
+    }
+    if (!isDaily && body.roomId && !body.bedId) {
+      throw badRequest(`${who} is a monthly resident — assign them a bed, not a whole room.`);
+    }
+
     const assigned = bed ?? room; // null → just register (Reserved)
     const hostelId = room?.hostelId ?? bed?.hostelId ?? body.hostelId;
     if (!hostelId) throw badRequest("Select a hostel, or a bed/room to assign");
