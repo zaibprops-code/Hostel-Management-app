@@ -306,7 +306,7 @@ export default function ResidentDetailPage() {
                 (can("residents.manage") && r.occupantType !== "DAILY") ? { label: "✏️ Edit rent terms", onClick: openTerms } : null,
                 (can("payments.manage") && active) ? { label: "🛡 Record deposit", onClick: openDeposit } : null,
                 (can("payments.manage") && active && depositEditable) ? { label: "✏️ Edit deposit", onClick: openDepositEdit } : null,
-                canMove ? { label: "🔁 Change room", onClick: () => setMoveOpen(true) } : null,
+                canMove ? { label: "🔁 Change room / branch", onClick: () => setMoveOpen(true) } : null,
                 (can("residents.manage") && r.status === "ACTIVE") ? { label: "🔔 Give Notice", onClick: () => setNotice(true) } : null,
                 (can("residents.manage") && !r.userId) ? { label: "🔑 Create Portal Login", onClick: () => { setPortalForm({ email: r.email ?? "", password: "" }); setPortal(true); } } : null,
                 (can("residents.manage") && active) ? { label: "🚪 Checkout", onClick: () => setCheckout(true) } : null,
@@ -385,7 +385,10 @@ export default function ResidentDetailPage() {
             <div className="flex items-center justify-between gap-2 text-sm mb-2 rounded-lg bg-slate-50 px-3 py-2">
               <span className="text-slate-400">Room</span>
               <span className="flex items-center gap-3 min-w-0">
-                <span className="font-medium text-slate-700 truncate">{r.bed.room?.name} · {r.bed.label}</span>
+                <span className="min-w-0 text-right">
+                  <span className="block font-medium text-slate-700 truncate">{r.bed.room?.name} · {r.bed.label}</span>
+                  {r.hostel?.name && <span className="block text-[11px] text-slate-400 truncate">{r.hostel.name}</span>}
+                </span>
                 {canMove && <button onClick={() => setMoveOpen(true)} className="text-xs font-medium text-brand-600 shrink-0">Change</button>}
               </span>
             </div>

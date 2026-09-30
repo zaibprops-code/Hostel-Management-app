@@ -208,8 +208,9 @@ router.get(
         return {
           id: m.id,
           movedOn: n.moveDate ?? ymd(m.createdAt),
-          from: [o.roomName, o.bedLabel].filter(Boolean).join(" · "),
-          to: [n.roomName, n.bedLabel].filter(Boolean).join(" · "),
+          crossBranch: !!n.crossBranch,
+          from: [n.crossBranch ? o.hostelName : null, o.roomName, o.bedLabel].filter(Boolean).join(" · "),
+          to: [n.crossBranch ? n.hostelName : null, n.roomName, n.bedLabel].filter(Boolean).join(" · "),
           oldRent: o.monthlyRent ?? null,
           newRent: n.monthlyRent ?? null,
           rentFrom: n.rentFrom ?? null,
@@ -518,14 +519,23 @@ router.post(
   })
 );
 
-// POST /api/residents/:id/move — change a resident's room / bed within their
-// hostel. The new bed must be free; the old bed becomes available (or goes to
-// maintenance). Rent can stay, or change to a new amount starting either
+// POST /api/residents/:id/move — change a resident's room / bed, in the same
+// hostel or another branch. The new bed must be free; the old bed becomes
+// available (or goes to maintenance). Rent can stay, or change to a new amount
+// starting either
 //   • NEXT_MONTH — the move month is billed as before, later months at the new
 //     rent; or
 //   • MOVE_DATE — the move month is split by days (old rent before the move,
 //     new rent from the move day), later months at the new rent.
 // Any rent already paid above a reduced charge becomes advance credit.
+//
+// Moving to another branch (hostel):
+//   • The month of the move stays with the branch it started in; later
+//     months belong to the new branch.
+//   • Unpaid rent up to the move month is old-branch money: record it first,
+//     or pass carryBalance to hand it to the new branch to collect.
+//   • The security deposit moves with the resident (the new branch holds and
+//     refunds it). The rent-due day follows the new hostel.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const perDayLabel = (n: number) => `₨${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 router.post(
@@ -538,20 +548,22 @@ router.post(
     rentFrom: z.enum(["NEXT_MONTH", "MOVE_DATE"]).default("NEXT_MONTH"),
     oldBedStatus: z.enum(["AVAILABLE", "MAINTENANCE"]).default("AVAILABLE"),
     reason: z.string().max(300).optional(),
+    carryBalance: z.coerce.boolean().default(false),
   })),
   asyncHandler(async (req, res) => {
-    const body = req.body as { bedId: string; moveDate: Date; monthlyRent?: number; rentFrom: "NEXT_MONTH" | "MOVE_DATE"; oldBedStatus: "AVAILABLE" | "MAINTENANCE"; reason?: string };
-    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { bed: { include: { room: true } } } });
+    const body = req.body as { bedId: string; moveDate: Date; monthlyRent?: number; rentFrom: "NEXT_MONTH" | "MOVE_DATE"; oldBedStatus: "AVAILABLE" | "MAINTENANCE"; reason?: string; carryBalance: boolean };
+    const resident = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { bed: { include: { room: true } }, hostel: { select: { id: true, name: true } } } });
     if (!resident) throw notFound("Resident not found");
     await assertHostelAccess(req, resident.hostelId);
     if (resident.status !== "ACTIVE" && resident.status !== "NOTICE_GIVEN") throw badRequest("Only a current resident can change rooms.");
     if (resident.occupantType === "DAILY") throw badRequest("Daily guests book a whole room — check them out and book the new room instead.");
     if (!resident.bed || !resident.admissionDate) throw badRequest(`${resident.fullName} has no bed yet — use Assign instead.`);
 
-    const target = await prisma.bed.findUnique({ where: { id: body.bedId }, include: { room: true, resident: { select: { id: true } } } });
+    const target = await prisma.bed.findUnique({ where: { id: body.bedId }, include: { room: true, hostel: { select: { id: true, name: true } }, resident: { select: { id: true } } } });
     if (!target) throw notFound("Bed not found");
     if (target.id === resident.bed.id) throw badRequest("That is already their bed.");
-    if (target.hostelId !== resident.hostelId) throw badRequest("Rooms can only be changed within the same hostel. To move branches, check out here and admit there.");
+    const crossBranch = target.hostelId !== resident.hostelId;
+    if (crossBranch) await assertHostelAccess(req, target.hostelId);
 
     // Move date: not before they joined, not in the future (1 day slack for
     // time zones).
@@ -563,6 +575,17 @@ router.post(
     const oldRent = dec(resident.monthlyRent);
     const newRent = body.monthlyRent ?? oldRent;
     const rentChanges = Math.abs(newRent - oldRent) > 0.5;
+    // A branch transfer is dated within the current month, so every earlier
+    // month (and its payments) stays whole with the old branch.
+    const now = new Date();
+    if (crossBranch && move.getFullYear() * 12 + move.getMonth() < now.getFullYear() * 12 + now.getMonth()) {
+      throw badRequest("A branch transfer can only be dated this month. Earlier months stay with the branch the resident was in.");
+    }
+    // A month can only be billed by one branch, so on a branch transfer the
+    // move month stays with the old branch and a new rent starts next month.
+    if (rentChanges && body.rentFrom === "MOVE_DATE" && crossBranch) {
+      throw badRequest(`On a branch transfer the move month stays with ${resident.hostel.name}, so the new rent starts next month. Choose 'from next month'.`);
+    }
     if (rentChanges && body.rentFrom === "MOVE_DATE" && resident.billingMode !== "CALENDAR") {
       throw badRequest("Splitting the month by days works for calendar-month rent. Choose 'from next month' instead.");
     }
@@ -578,6 +601,19 @@ router.post(
 
     // Make sure every month owed so far exists at the old rent before changing it.
     await generateDueRent(prisma, undefined, [resident.id]);
+
+    // Branch transfer: rent still unpaid up to the move month belongs to the
+    // old branch — it must be recorded first, or explicitly carried over.
+    const moveYm = move.getFullYear() * 12 + move.getMonth();
+    if (crossBranch && !body.carryBalance) {
+      const open = await prisma.rentCharge.findMany({ where: { residentId: resident.id, status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] } } });
+      const arrears = open
+        .filter((c) => c.periodYear * 12 + (c.periodMonth - 1) <= moveYm)
+        .reduce((sum, c) => sum + Math.max(0, dec(c.amount) - dec(c.discount) - dec(c.amountPaid)), 0);
+      if (arrears > 0.5) {
+        throw badRequest(`${resident.fullName} owes ₨${Math.round(arrears).toLocaleString("en-US")} at ${resident.hostel.name}. Record that payment first, or choose to carry the balance to ${target.hostel.name}.`);
+      }
+    }
 
     const my = move.getFullYear();
     const mm = move.getMonth() + 1;
@@ -603,9 +639,25 @@ router.post(
           throw conflict(`${target.room.name} · ${target.label} is marked ${fresh.status.toLowerCase()}, not free. Pick another bed or set it to Available first.`);
         }
 
-        await tx.resident.update({ where: { id: resident.id }, data: { bedId: target.id, ...(rentChanges ? { monthlyRent: newRent } : {}) } });
+        await tx.resident.update({
+          where: { id: resident.id },
+          data: { bedId: target.id, ...(crossBranch ? { hostelId: target.hostelId } : {}), ...(rentChanges ? { monthlyRent: newRent } : {}) },
+        });
         await tx.bed.update({ where: { id: fromBed.id }, data: { status: body.oldBedStatus } });
         await tx.bed.update({ where: { id: target.id }, data: { status: "OCCUPIED" } });
+
+        if (crossBranch) {
+          // Months after the move month are the new branch's; so is any
+          // unpaid balance the owner chose to carry over.
+          const all = await tx.rentCharge.findMany({ where: { residentId: resident.id }, select: { id: true, periodYear: true, periodMonth: true, status: true } });
+          const toNew = all.filter((c) => {
+            const ym = c.periodYear * 12 + (c.periodMonth - 1);
+            return ym > moveYm || (body.carryBalance && ["PENDING", "PARTIALLY_PAID", "OVERDUE"].includes(c.status));
+          });
+          if (toNew.length) await tx.rentCharge.updateMany({ where: { id: { in: toNew.map((c) => c.id) } }, data: { hostelId: target.hostelId } });
+          // The deposit is held (and later refunded) by the branch they live in.
+          await tx.securityDeposit.updateMany({ where: { residentId: resident.id }, data: { hostelId: target.hostelId } });
+        }
 
         if (!rentChanges) return;
         const charges = await tx.rentCharge.findMany({
@@ -643,19 +695,23 @@ router.post(
       throw e;
     }
 
-    await audit({
+    const entry = {
       userId: req.auth!.id,
       action: "resident.move",
       entity: "Resident",
       entityId: resident.id,
-      hostelId: resident.hostelId,
-      oldValue: { bedId: fromBed.id, roomName: fromBed.room.name, bedLabel: fromBed.label, monthlyRent: oldRent },
+      oldValue: { hostelId: resident.hostelId, hostelName: resident.hostel.name, bedId: fromBed.id, roomName: fromBed.room.name, bedLabel: fromBed.label, monthlyRent: oldRent },
       newValue: {
+        hostelId: target.hostelId, hostelName: target.hostel.name,
         bedId: target.id, roomName: target.room.name, bedLabel: target.label, monthlyRent: newRent,
         moveDate: ymd(move), rentFrom: rentChanges ? body.rentFrom : null, oldBedStatus: body.oldBedStatus, reason: body.reason || null,
+        crossBranch, carryBalance: crossBranch ? body.carryBalance : undefined,
       },
-    });
-    res.json({ success: true, room: target.room.name, bed: target.label, monthlyRent: newRent });
+    };
+    await audit({ ...entry, hostelId: resident.hostelId });
+    // A branch transfer also shows in the new branch's audit trail.
+    if (crossBranch) await audit({ ...entry, action: "resident.transfer.in", hostelId: target.hostelId });
+    res.json({ success: true, hostel: target.hostel.name, room: target.room.name, bed: target.label, monthlyRent: newRent, crossBranch });
   })
 );
 
