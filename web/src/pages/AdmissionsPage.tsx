@@ -177,7 +177,7 @@ export default function AdmissionsPage() {
         toast.error(`Resident saved, but these could not be uploaded: ${failures.join(", ")}. You can add them from the resident's profile.`);
       }
 
-      setOpen(false); setPage(1); await refetch();
+      setOpen(false); setPage(1); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 

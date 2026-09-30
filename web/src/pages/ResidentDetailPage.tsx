@@ -26,7 +26,7 @@ export default function ResidentDetailPage() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { can, user } = useAuth();
-  const { data: r, loading, refetch } = useApi<any>(`/residents/${id}`);
+  const { data: r, loading, refetch, setData } = useApi<any>(`/residents/${id}`);
   const pdfRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState<"" | "save" | "share" | "formSave" | "formShare">("");
@@ -65,7 +65,7 @@ export default function ResidentDetailPage() {
   async function uploadPhoto(file?: File) {
     if (!file) return;
     setUploading(true); setError("");
-    try { await uploadFile({ scope: "resident.photo", residentId: id!, file: await compressPhoto(file) }); await refetch(); }
+    try { await uploadFile({ scope: "resident.photo", residentId: id!, file: await compressPhoto(file) }); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function uploadDoc() {
@@ -73,22 +73,22 @@ export default function ResidentDetailPage() {
     setUploading(true); setError("");
     try {
       await uploadFile({ scope: "resident.document", residentId: id!, documentType: docForm.type, file: await compressDocument(docForm.file) });
-      setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); await refetch();
+      setDocOpen(false); setDocForm({ type: "CNIC_FRONT", file: null }); refetch();
     } catch (e) { setError(apiError(e)); } finally { setUploading(false); }
   }
   async function deleteDoc(docId: string) {
     if (!(await confirm({ title: "Delete document?", message: "This document will be permanently removed.", confirmLabel: "Delete", danger: true }))) return;
-    try { await api.delete(`/uploads/resident/document/${docId}`); setViewing(null); await refetch(); toast.success("Document deleted."); }
+    try { await api.delete(`/uploads/resident/document/${docId}`); setViewing(null); refetch(); toast.success("Document deleted."); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function deletePhoto() {
     if (!(await confirm({ title: "Remove photo?", message: "This resident's profile photo will be removed.", confirmLabel: "Remove", danger: true }))) return;
-    try { await api.delete(`/uploads/resident/${id}/photo`); setViewing(null); await refetch(); toast.success("Photo removed."); }
+    try { await api.delete(`/uploads/resident/${id}/photo`); setViewing(null); refetch(); toast.success("Photo removed."); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function archiveFiles() {
     if (!(await confirm({ title: "Archive files?", message: "This permanently DELETES this resident's photo and all documents from the server to free up space. Download anything you want to keep first.", confirmLabel: "Archive & delete", danger: true }))) return;
-    try { const { data } = await api.delete(`/uploads/resident/${id}/files`); toast.success(`Archived. ${data.removed} file(s) removed to free space.`); await refetch(); }
+    try { const { data } = await api.delete(`/uploads/resident/${id}/files`); toast.success(`Archived. ${data.removed} file(s) removed to free space.`); refetch(); }
     catch (e) { toast.error(apiError(e)); }
   }
 
@@ -96,7 +96,7 @@ export default function ResidentDetailPage() {
     setSaving(true); setError("");
     try {
       const { data } = await api.post(`/residents/${id}/portal-access`, { email: portalForm.email || undefined, password: portalForm.password });
-      setPortalDone(data.email); setPortal(false); await refetch();
+      setPortalDone(data.email); setPortal(false); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
@@ -130,19 +130,24 @@ export default function ResidentDetailPage() {
       if (payProof && data?.id) {
         await uploadFile({ scope: "payment.proof", paymentId: data.id, file: await compressDocument(payProof) }).catch(() => {});
       }
-      setPay(false); setPayProof(null); await refetch();
+      setPay(false); setPayProof(null); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function uploadPaymentProof(paymentId: string, file?: File) {
     if (!file) return;
-    try { await uploadFile({ scope: "payment.proof", paymentId, file: await compressDocument(file) }); await refetch(); toast.success("Receipt attached."); }
+    try { await uploadFile({ scope: "payment.proof", paymentId, file: await compressDocument(file) }); refetch(); toast.success("Receipt attached."); }
     catch (e) { toast.error(apiError(e)); }
   }
 
   function openDeposit() { setDepForm({ amount: 0, method: "CASH" }); setError(""); setDeposit(true); }
   async function recordDeposit() {
     setSaving(true); setError("");
-    try { await api.post(`/residents/${id}/deposit`, depForm); setDeposit(false); await refetch(); toast.success("Security deposit recorded."); }
+    try {
+      const { data: dep } = await api.post(`/residents/${id}/deposit`, depForm);
+      setDeposit(false); toast.success("Security deposit recorded.");
+      setData((prev: any) => prev && { ...prev, deposit: { ...(prev.deposit ?? {}), amount: dep.amount, status: "HELD" } });
+      refetch();
+    }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
@@ -154,8 +159,10 @@ export default function ResidentDetailPage() {
   async function saveDepositEdit() {
     setSaving(true); setError("");
     try {
-      await api.put(`/residents/${id}/deposit`, { amount: depEditForm.amount, method: depEditForm.method, reason: depEditForm.reason || undefined });
-      setDepEdit(false); await refetch(); toast.success("Security deposit updated.");
+      const { data: dep } = await api.put(`/residents/${id}/deposit`, { amount: depEditForm.amount, method: depEditForm.method, reason: depEditForm.reason || undefined });
+      setDepEdit(false); toast.success("Security deposit updated.");
+      setData((prev: any) => prev && { ...prev, deposit: prev.deposit ? { ...prev.deposit, amount: dep.amount } : { amount: dep.amount, status: "HELD" } });
+      refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
@@ -166,12 +173,14 @@ export default function ResidentDetailPage() {
   async function saveTerms() {
     setSaving(true); setError("");
     try {
-      await api.patch(`/residents/${id}/billing`, {
+      const { data: t } = await api.patch(`/residents/${id}/billing`, {
         monthlyRent: termsForm.monthlyRent,
         billingMode: termsForm.billingMode,
         billingDay: termsForm.billingDay === "" ? null : Number(termsForm.billingDay),
       });
-      setTerms(false); await refetch(); toast.success("Rent terms updated.");
+      setTerms(false); toast.success("Rent terms updated.");
+      setData((prev: any) => prev && { ...prev, monthlyRent: t.monthlyRent, billingMode: t.billingMode, billingDay: t.billingDay });
+      refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
@@ -181,7 +190,7 @@ export default function ResidentDetailPage() {
     setSaving(true); setError("");
     try {
       await api.post(`/residents/${id}/charges/${r.firstMonth.chargeId}/adjust`, { prorate: true, excessTo: prorateExcess });
-      setProrateOpen(false); await refetch(); toast.success("First month now charged for the days stayed only.");
+      setProrateOpen(false); refetch(); toast.success("First month now charged for the days stayed only.");
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   // "Keep full month" — remembered per charge in this browser.
@@ -193,17 +202,17 @@ export default function ResidentDetailPage() {
   function openAdjust(c: any) { setAdjForm({ amount: c.amount, note: c.notes || "", excessTo: "deposit" }); setError(""); setAdjust(c); }
   async function saveAdjust(payload: any) {
     setSaving(true); setError("");
-    try { await api.post(`/residents/${id}/charges/${adjust.id}/adjust`, payload); setAdjust(null); await refetch(); toast.success("Charge updated."); }
+    try { await api.post(`/residents/${id}/charges/${adjust.id}/adjust`, payload); setAdjust(null); refetch(); toast.success("Charge updated."); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function giveNotice() {
     setSaving(true); setError("");
-    try { await api.post(`/checkouts/${id}/notice`, { noticeDate: new Date().toISOString().slice(0, 10) }); setNotice(false); await refetch(); }
+    try { await api.post(`/checkouts/${id}/notice`, { noticeDate: new Date().toISOString().slice(0, 10) }); setNotice(false); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function finalizeCheckout() {
     setSaving(true); setError("");
-    try { await api.post(`/checkouts/${id}`, coForm); setCheckout(false); await refetch(); }
+    try { await api.post(`/checkouts/${id}`, coForm); setCheckout(false); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
@@ -223,7 +232,7 @@ export default function ResidentDetailPage() {
     setSaving(true); setError("");
     try {
       await api.post("/admissions", { residentId: id, bedId: admitForm.bedId, admissionDate: admitForm.admissionDate, monthlyRent: admitForm.monthlyRent, billingMode: admitForm.billingMode, proratedFirst: admitForm.proratedFirst, depositAmount: admitForm.depositAmount, initialPayment: admitForm.initialPayment, paymentMethod: admitForm.paymentMethod });
-      setAdmitOpen(false); toast.success("Resident admitted and bed assigned."); await refetch();
+      setAdmitOpen(false); toast.success("Resident admitted and bed assigned."); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 

@@ -21,12 +21,12 @@ export default function StaffPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/staff", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/staff", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   function openSalary(s: any) { setSalForm({ ...salForm, netPaid: s.monthlySalary }); setSalary(s); }
   async function paySalary() {
     setSaving(true); setError("");
-    try { await api.post(`/staff/${salary.id}/salary`, salForm); setSalary(null); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post(`/staff/${salary.id}/salary`, salForm); setSalary(null); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
   if (loading) return <PageLoader />;

@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import fs from "fs";
 import { env } from "./lib/env";
+import { prisma } from "./lib/prisma";
 import { authenticate } from "./middleware/auth";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 
@@ -69,6 +70,12 @@ export function createApp() {
   const authLimiter = rateLimit({ windowMs: 15 * 60_000, max: 40 });
 
   app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+  // Keep-warm ping from the open app: keeps this server instance and its
+  // database connection alive so the next save doesn't pay a cold start.
+  app.get("/api/health/warm", async (_req, res) => {
+    try { await prisma.$queryRaw`SELECT 1`; } catch { /* reported by /api/health checks */ }
+    res.set("Cache-Control", "no-store").json({ ok: true });
+  });
 
   // Public routes (no auth): first-run setup + login + resident self-intake.
   app.use("/api/setup", setupRouter);

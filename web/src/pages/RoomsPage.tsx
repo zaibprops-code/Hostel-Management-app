@@ -64,14 +64,14 @@ export default function RoomsPage() {
     setSaving(true); setError("");
     try {
       await api.post("/structure/rooms", { ...roomForm, hostelId: roomForm.hostelId || hostels[0]?.id });
-      setModal(null); await refetch();
+      setModal(null); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function addBed() {
     setSaving(true); setError("");
     try {
       await api.post("/structure/beds", bedForm);
-      setModal(null); await refetch(); await reload();
+      setModal(null); refetch(); reload();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   // Open "Add Bed", preselecting the given room or the first one with space.
@@ -94,7 +94,7 @@ export default function RoomsPage() {
     setSaving(true); setError("");
     try {
       await api.put(`/structure/rooms/${editRoom.id}`, { name: editForm.name, capacity: editForm.capacity });
-      setEditRoom(null); toast.success("Room updated."); await refetch();
+      setEditRoom(null); toast.success("Room updated."); refetch();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function setBedStatus(bed: Bed, status: string) {
@@ -140,20 +140,20 @@ export default function RoomsPage() {
       if (!res?.id) { setError("The bed could not be assigned. Please try again."); return; }
       const name = pool.find((r) => r.id === assignForm.residentId)?.fullName ?? "Resident";
       toast.success(`${name} assigned to ${assign.roomName} · ${assign.bed.label}.`);
-      setAssign(null); await refetch(); await reload();
+      setAssign(null); refetch(); reload();
     } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function deleteBed(bed: Bed) {
     if (bed.resident) { toast.error("This bed is occupied. Check the resident out first."); return; }
     if (!(await confirm({ title: "Delete bed?", message: `Delete bed "${bed.label}"? This can't be undone.`, confirmLabel: "Delete bed", danger: true }))) return;
-    try { await api.delete(`/structure/beds/${bed.id}`); toast.success("Bed deleted."); await refetch(); await reload(); }
+    try { await api.delete(`/structure/beds/${bed.id}`); toast.success("Bed deleted."); refetch(); reload(); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function deleteRoom(room: Room) {
     const occupied = room.beds.filter((b) => b.resident).length;
     if (occupied) { toast.error("This room has occupied beds. Check those residents out first."); return; }
     if (!(await confirm({ title: "Delete room?", message: `Delete "${room.name}" and its ${room.beds.length} bed(s)? This can't be undone.`, confirmLabel: "Delete room", danger: true }))) return;
-    try { await api.delete(`/structure/rooms/${room.id}`); toast.success("Room deleted."); await refetch(); await reload(); }
+    try { await api.delete(`/structure/rooms/${room.id}`); toast.success("Room deleted."); refetch(); reload(); }
     catch (e) { toast.error(apiError(e)); }
   }
 

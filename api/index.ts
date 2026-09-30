@@ -13,5 +13,10 @@
 // machine, never as a side effect of a deploy or a cold start. Prisma connects
 // lazily on the first query, so no explicit $connect is needed here.
 import { createApp } from "../server/src/app";
+import { prisma } from "../server/src/lib/prisma";
+
+// Start opening the database connection as soon as the function wakes, in
+// parallel with the first request's setup, instead of on its first query.
+prisma.$connect().catch(() => { /* the first query will retry and report */ });
 
 export default createApp();

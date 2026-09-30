@@ -29,9 +29,21 @@ const HostelContext = createContext<HostelContextValue | null>(null);
 
 export function HostelProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [hostels, setHostels] = useState<HostelLite[]>([]);
+  // The hostel list is remembered per user on this device so pages and the
+  // switcher appear instantly; it is refreshed from the server right away.
+  const cacheKey = user ? `hms_hostels:${user.id}` : "";
+  const readCache = (): HostelLite[] | null => {
+    try { const raw = cacheKey ? localStorage.getItem(cacheKey) : null; return raw ? JSON.parse(raw) : null; } catch { return null; }
+  };
+  const [hostels, setHostelsState] = useState<HostelLite[]>(() => readCache() ?? []);
   const [selected, setSelected] = useState<string | "all">("all");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !readCache());
+  const setHostels = (next: HostelLite[] | ((hs: HostelLite[]) => HostelLite[])) =>
+    setHostelsState((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      try { if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(value)); } catch { /* storage unavailable */ }
+      return value;
+    });
 
   async function reload() {
     // Residents use the separate portal; everyone else needs their hostel list
@@ -44,13 +56,16 @@ export function HostelProvider({ children }: { children: ReactNode }) {
       const { data } = await api.get("/hostels/accessible");
       setHostels(data);
     } catch {
-      setHostels([]);
+      // Keep what we had (e.g. a network blip); only an empty list if nothing.
+      setHostelsState((prev) => prev);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    const cached = readCache();
+    if (cached) { setHostelsState(cached); setLoading(false); }
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);

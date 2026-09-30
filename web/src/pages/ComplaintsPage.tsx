@@ -23,12 +23,12 @@ export default function ComplaintsPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/complaints", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/complaints", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
-  async function updateStatus(id: string, status: string) { try { await api.patch(`/complaints/${id}`, { status }); await refetch(); } catch (e) { toast.error(apiError(e)); } }
+  async function updateStatus(id: string, status: string) { try { await api.patch(`/complaints/${id}`, { status }); refetch(); } catch (e) { toast.error(apiError(e)); } }
   async function sendReply() {
     setSaving(true); setError("");
-    try { await api.patch(`/complaints/${reply.id}`, { response: replyText, status: "IN_PROGRESS" }); setReply(null); setReplyText(""); await refetch(); }
+    try { await api.patch(`/complaints/${reply.id}`, { response: replyText, status: "IN_PROGRESS" }); setReply(null); setReplyText(""); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 

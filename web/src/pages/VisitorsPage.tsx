@@ -18,9 +18,9 @@ export default function VisitorsPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/visitors", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/visitors", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
-  async function checkout(id: string) { try { await api.patch(`/visitors/${id}/checkout`); await refetch(); } catch (e) { toast.error(apiError(e)); } }
+  async function checkout(id: string) { try { await api.patch(`/visitors/${id}/checkout`); refetch(); } catch (e) { toast.error(apiError(e)); } }
 
   if (loading) return <PageLoader />;
 

@@ -49,7 +49,7 @@ export default function PaymentsPage() {
       if (payProof && data?.id) {
         await uploadFile({ scope: "payment.proof", paymentId: data.id, file: await compressDocument(payProof) }).catch(() => {});
       }
-      setPayOpen(false); setPage(1); await refetch();
+      setPayOpen(false); setPage(1); refetch();
     } catch (e) { setPayError(apiError(e)); } finally { setSavingPay(false); }
   }
 
@@ -69,13 +69,13 @@ export default function PaymentsPage() {
   }
   async function uploadProof(id: string, file?: File) {
     if (!file) return;
-    try { await uploadFile({ scope: "payment.proof", paymentId: id, file: await compressDocument(file) }); await refetch(); }
+    try { await uploadFile({ scope: "payment.proof", paymentId: id, file: await compressDocument(file) }); refetch(); }
     catch (e) { toast.error(apiError(e)); }
   }
   async function voidPayment(id: string) {
     const reason = await prompt({ title: "Void payment", message: "This reverses the payment. Add a reason for the record.", label: "Reason", required: true, confirmLabel: "Void payment" });
     if (!reason) return;
-    try { await api.post(`/payments/${id}/void`, { reason }); toast.success("Payment voided."); await refetch(); } catch (e) { toast.error(apiError(e)); }
+    try { await api.post(`/payments/${id}/void`, { reason }); toast.success("Payment voided."); refetch(); } catch (e) { toast.error(apiError(e)); }
   }
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;

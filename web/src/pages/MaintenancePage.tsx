@@ -20,10 +20,10 @@ export default function MaintenancePage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/maintenance", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/maintenance", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function update(id: string, patch: any) {
-    try { await api.patch(`/maintenance/${id}`, patch); await refetch(); } catch (e) { toast.error(apiError(e)); }
+    try { await api.patch(`/maintenance/${id}`, patch); refetch(); } catch (e) { toast.error(apiError(e)); }
   }
 
   if (loading) return <PageLoader />;

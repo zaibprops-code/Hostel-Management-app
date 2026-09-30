@@ -40,7 +40,7 @@ export default function InventoryPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/inventory", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/inventory", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   function openTxn(item: any, type = "PURCHASE") {
     setError("");

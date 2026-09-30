@@ -20,7 +20,7 @@ export default function CapitalPage() {
 
   async function saveInv() {
     setSaving(true); setError("");
-    try { await api.post("/capital/investments", invForm); setModal(null); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/capital/investments", invForm); setModal(null); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function saveLoan() {
     setSaving(true); setError("");

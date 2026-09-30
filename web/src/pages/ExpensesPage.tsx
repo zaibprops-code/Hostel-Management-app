@@ -26,13 +26,13 @@ export default function ExpensesPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/expenses", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); }
+    try { await api.post("/expenses", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   async function voidExpense(id: string) {
     const reason = await prompt({ title: "Void expense", message: "This reverses the expense. Add a reason for the record.", label: "Reason", required: true, confirmLabel: "Void expense" });
     if (!reason) return;
-    try { await api.post(`/expenses/${id}/void`, { reason }); toast.success("Expense voided."); await refetch(); } catch (e) { toast.error(apiError(e)); }
+    try { await api.post(`/expenses/${id}/void`, { reason }); toast.success("Expense voided."); refetch(); } catch (e) { toast.error(apiError(e)); }
   }
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;
 

@@ -25,13 +25,17 @@ function range(req: any) {
 // GET /api/reports/occupancy
 router.get("/occupancy", requirePermission("reports.view"), asyncHandler(async (req, res) => {
   const ids = await scopedIds(req);
-  const perHostel = await Promise.all(ids.map(async (id) => {
-    const hostel = await prisma.hostel.findUnique({ where: { id }, select: { name: true } });
-    const total = await prisma.bed.count({ where: { hostelId: id } });
-    const occupied = await prisma.bed.count({ where: { hostelId: id, status: "OCCUPIED" } });
-    const available = await prisma.bed.count({ where: { hostelId: id, status: "AVAILABLE" } });
-    return { hostel: hostel?.name, totalBeds: total, occupiedBeds: occupied, availableBeds: available, occupancyRate: total ? Math.round((occupied / total) * 100) : 0 };
-  }));
+  // Two queries for all hostels (not four per hostel).
+  const [hostels, bedGroups] = await Promise.all([
+    prisma.hostel.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+    prisma.bed.groupBy({ by: ["hostelId", "status"], where: { hostelId: { in: ids } }, _count: { _all: true } }),
+  ]);
+  const beds = (id: string, status?: string) => bedGroups.filter((g) => g.hostelId === id && (!status || g.status === status)).reduce((s, g) => s + g._count._all, 0);
+  const perHostel = ids.map((id) => {
+    const total = beds(id);
+    const occupied = beds(id, "OCCUPIED");
+    return { hostel: hostels.find((h) => h.id === id)?.name, totalBeds: total, occupiedBeds: occupied, availableBeds: beds(id, "AVAILABLE"), occupancyRate: total ? Math.round((occupied / total) * 100) : 0 };
+  });
   res.json(perHostel);
 }));
 
@@ -95,13 +99,25 @@ router.get("/deposits", requirePermission("reports.view"), asyncHandler(async (r
 router.get("/hostel-comparison", requirePermission("reports.view"), asyncHandler(async (req, res) => {
   if (!hasPermission(req.auth!.role, req.auth!.permissions, "finance.viewProfit")) throw forbidden();
   const ids = await accessibleHostelIds(req);
-  const rows = await Promise.all(ids.map(async (id) => {
-    const hostel = await prisma.hostel.findUnique({ where: { id }, select: { name: true } });
-    const pl = await profitAndLoss([id], range(req));
-    const total = await prisma.bed.count({ where: { hostelId: id } });
-    const occupied = await prisma.bed.count({ where: { hostelId: id, status: "OCCUPIED" } });
-    return { hostel: hostel?.name, revenue: pl.totalRevenue, expenses: pl.totalExpenses, profit: pl.netProfit, occupancyRate: total ? Math.round((occupied / total) * 100) : 0 };
-  }));
+  // Five grouped queries for all hostels together (not ~8 per hostel). Same
+  // figures as profitAndLoss: revenue = completed payments + other income.
+  const { from, to } = range(req);
+  const dated = (field: string) => (from || to ? { [field]: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {});
+  const [hostels, bedGroups, paid, income, spent] = await Promise.all([
+    prisma.hostel.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+    prisma.bed.groupBy({ by: ["hostelId", "status"], where: { hostelId: { in: ids } }, _count: { _all: true } }),
+    prisma.payment.groupBy({ by: ["hostelId"], where: { hostelId: { in: ids }, status: "COMPLETED", ...dated("paidAt") }, _sum: { amount: true } }),
+    prisma.income.groupBy({ by: ["hostelId"], where: { hostelId: { in: ids }, status: "ACTIVE", ...dated("date") }, _sum: { amount: true } }),
+    prisma.expense.groupBy({ by: ["hostelId"], where: { hostelId: { in: ids }, status: "ACTIVE", ...dated("date") }, _sum: { amount: true } }),
+  ]);
+  const sum = (rows: { hostelId: string; _sum: { amount: unknown } }[], id: string) => dec(rows.find((r) => r.hostelId === id)?._sum.amount as any);
+  const rows = ids.map((id) => {
+    const total = bedGroups.filter((g) => g.hostelId === id).reduce((s, g) => s + g._count._all, 0);
+    const occupied = bedGroups.find((g) => g.hostelId === id && g.status === "OCCUPIED")?._count._all ?? 0;
+    const revenue = sum(paid, id) + sum(income, id);
+    const expenses = sum(spent, id);
+    return { hostel: hostels.find((h) => h.id === id)?.name, revenue, expenses, profit: revenue - expenses, occupancyRate: total ? Math.round((occupied / total) * 100) : 0 };
+  });
   res.json(rows);
 }));
 

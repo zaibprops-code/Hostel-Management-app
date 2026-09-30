@@ -47,11 +47,11 @@ router.put("/menu", requirePermission("food.manage"), validateBody(z.object({
 // ---- Food headcount / cost estimate ------------------------------------
 router.get("/headcount", requirePermission("food.view"), asyncHandler(async (req, res) => {
   const scope = await hostelScope(req);
-  const [onPlan, offPlan] = await Promise.all([
+  const [onPlan, offPlan, foodExpense] = await Promise.all([
     prisma.resident.count({ where: { ...scope, status: "ACTIVE", foodPlanId: { not: null } } }),
     prisma.resident.count({ where: { ...scope, status: "ACTIVE", foodPlanId: null } }),
+    prisma.expense.aggregate({ where: { ...scope, status: "ACTIVE", category: { in: ["FOOD", "GROCERIES"] } }, _sum: { amount: true } }),
   ]);
-  const foodExpense = await prisma.expense.aggregate({ where: { ...scope, status: "ACTIVE", category: { in: ["FOOD", "GROCERIES"] } }, _sum: { amount: true } });
   const totalFood = dec(foodExpense._sum.amount);
   res.json({ onPlan, offPlan, totalActive: onPlan + offPlan, monthlyFoodCost: totalFood, costPerResident: onPlan ? Math.round(totalFood / onPlan) : 0 });
 }));

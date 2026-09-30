@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, badRequest, forbidden, notFound } from "../lib/http";
 import { validateBody, parsePagination } from "../middleware/validate";
@@ -79,11 +80,29 @@ router.post(
   validateBody(paymentSchema),
   asyncHandler(async (req, res) => {
     const body = req.body as z.infer<typeof paymentSchema>;
-    const resident = await prisma.resident.findUnique({ where: { id: body.residentId }, include: { hostel: { select: { code: true } } } });
+    const openCharges = (db: Prisma.TransactionClient | typeof prisma) => db.rentCharge.findMany({
+      where: {
+        residentId: body.residentId,
+        status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] },
+        ...(body.chargeIds && body.chargeIds.length ? { id: { in: body.chargeIds } } : {}),
+      },
+      orderBy: [{ periodYear: "asc" }, { periodMonth: "asc" }],
+    });
+    // The resident and their unpaid months are read together (one round trip).
+    const [resident, snapshot] = await Promise.all([
+      prisma.resident.findUnique({ where: { id: body.residentId }, include: { hostel: { select: { code: true } } } }),
+      openCharges(prisma),
+    ]);
     if (!resident) throw notFound("Resident not found");
     await assertHostelAccess(req, resident.hostelId);
 
-    const payment = await prisma.$transaction(async (tx) => {
+    // Record the payment and allocate it oldest-month-first. With `guarded`,
+    // each month is updated only if it is unchanged since it was read (someone
+    // else recording a payment for the same resident at that very moment makes
+    // it fail and the whole thing re-runs reading the months inside the
+    // transaction).
+    class Changed extends Error {}
+    const record = (charges: Awaited<ReturnType<typeof openCharges>> | null) => prisma.$transaction(async (tx) => {
       const paidAt = body.paidAt ?? new Date();
       const receiptNo = await nextReceiptNo(tx, resident.hostelId, resident.hostel.code, paidAt);
       const created = await tx.payment.create({
@@ -100,35 +119,38 @@ router.post(
         },
       });
 
-      // Allocate oldest-first across outstanding charges.
-      const charges = await tx.rentCharge.findMany({
-        where: {
-          residentId: resident.id,
-          status: { in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] },
-          ...(body.chargeIds && body.chargeIds.length ? { id: { in: body.chargeIds } } : {}),
-        },
-        orderBy: [{ periodYear: "asc" }, { periodMonth: "asc" }],
-      });
-
+      const guarded = charges !== null;
+      const list = charges ?? (await openCharges(tx));
       let remaining = body.amount;
       const allocations: { paymentId: string; rentChargeId: string; amount: number }[] = [];
-      for (const charge of charges) {
+      for (const charge of list) {
         if (remaining <= 0) break;
         const balance = dec(charge.amount) - dec(charge.discount) - dec(charge.amountPaid);
         if (balance <= 0) continue;
         const applied = Math.min(remaining, balance);
         allocations.push({ paymentId: created.id, rentChargeId: charge.id, amount: applied });
         const newPaid = dec(charge.amountPaid) + applied;
-        await tx.rentCharge.update({
-          where: { id: charge.id },
-          data: { amountPaid: newPaid, status: computeStatus(dec(charge.amount), dec(charge.discount), newPaid, charge.dueDate) },
-        });
+        const data = { amountPaid: newPaid, status: computeStatus(dec(charge.amount), dec(charge.discount), newPaid, charge.dueDate) };
+        if (guarded) {
+          const r = await tx.rentCharge.updateMany({ where: { id: charge.id, amountPaid: charge.amountPaid, amount: charge.amount, discount: charge.discount }, data });
+          if (r.count !== 1) throw new Changed();
+        } else {
+          await tx.rentCharge.update({ where: { id: charge.id }, data });
+        }
         remaining -= applied;
       }
       if (allocations.length) await tx.paymentAllocation.createMany({ data: allocations });
       // Any unallocated remainder stays as an advance (unallocated payment).
       return created;
     });
+
+    let payment;
+    try {
+      payment = await record(snapshot);
+    } catch (e) {
+      if (!(e instanceof Changed)) throw e;
+      payment = await record(null); // rolled back; redo with a fresh read
+    }
 
     await audit({ userId: req.auth!.id, action: "payment.create", entity: "Payment", entityId: payment.id, hostelId: resident.hostelId, newValue: { amount: body.amount, method: body.method } });
     res.status(201).json({ id: payment.id, amount: dec(payment.amount) });

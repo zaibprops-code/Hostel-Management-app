@@ -326,7 +326,9 @@ router.patch(
     // Join-day cycle → calendar months: cut the current cycle at month end so
     // no days are billed twice (handled by switchToCalendar).
     const toCalendar = before.billingMode === "ANCHORED" && req.body.billingMode === "CALENDAR";
-    const resident = await prisma.$transaction(async (tx) => {
+    const billingChanges = (data.billingMode && data.billingMode !== before.billingMode) || (data.billingDay !== undefined && data.billingDay !== before.billingDay);
+    // Only the rent amount (or nothing that moves due dates) — one plain update.
+    const resident = !billingChanges ? await prisma.resident.update({ where: { id: before.id }, data }) : await prisma.$transaction(async (tx) => {
       const { billingMode: _m, billingDay: _d, ...rest } = data;
       const plain = toCalendar ? rest : data;
       if (Object.keys(plain).length) await tx.resident.update({ where: { id: before.id }, data: plain });
@@ -660,7 +662,8 @@ router.post(
         crossBranch, carryBalance: crossBranch ? body.carryBalance : undefined,
       },
     };
-    await audit({ ...entry, hostelId: resident.hostelId });
+    // Durable: Room History reads this straight back after the move.
+    await audit({ ...entry, hostelId: resident.hostelId }, { durable: true });
     // A branch transfer also shows in the new branch's audit trail.
     if (crossBranch) await audit({ ...entry, action: "resident.transfer.in", hostelId: target.hostelId });
     res.json({ success: true, hostel: target.hostel.name, room: target.room.name, bed: target.label, monthlyRent: newRent, crossBranch });

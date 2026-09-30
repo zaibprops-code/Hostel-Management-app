@@ -20,7 +20,7 @@ export default function NoticesPage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/notices", { ...form, hostelId: form.hostelId || undefined }); setOpen(false); await refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
+    try { await api.post("/notices", { ...form, hostelId: form.hostelId || undefined }); setOpen(false); refetch(); } catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
 
   if (loading) return <PageLoader />;

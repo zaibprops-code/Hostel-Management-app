@@ -21,7 +21,7 @@ export default function IncomePage() {
 
   async function save() {
     setSaving(true); setError("");
-    try { await api.post("/income", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); await refetch(); }
+    try { await api.post("/income", { ...form, hostelId: form.hostelId || hostels[0]?.id }); setOpen(false); refetch(); }
     catch (e) { setError(apiError(e)); } finally { setSaving(false); }
   }
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;

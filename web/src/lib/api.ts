@@ -84,14 +84,89 @@ export function needsServerConfig(): boolean {
 
 export const api = axios.create();
 
-api.interceptors.request.use((config) => {
+let refreshing: Promise<string> | null = null;
+
+// One shared token refresh at a time.
+function refreshTokens(): Promise<string> {
+  if (!refreshing) {
+    refreshing = axios
+      .post(`${getApiBase()}/auth/refresh`, { refreshToken: tokenStore.refresh })
+      .then((r) => {
+        tokenStore.set(r.data.accessToken, r.data.refreshToken);
+        return r.data.accessToken as string;
+      })
+      .finally(() => {
+        refreshing = null;
+      });
+  }
+  return refreshing;
+}
+
+// When the access token expires (read from the token itself — only to time
+// the refresh; the server still verifies it).
+function tokenExpiresAt(token: string | null): number | null {
+  if (!token) return null;
+  try {
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const exp = JSON.parse(atob(part)).exp;
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// Refresh shortly BEFORE the access token expires, so a save after a break
+// doesn't first fail, then refresh, then retry (three trips instead of one).
+export async function ensureFreshToken(): Promise<void> {
+  const exp = tokenExpiresAt(tokenStore.access);
+  if (exp && tokenStore.refresh && exp - Date.now() < 90_000) {
+    try { await refreshTokens(); } catch { /* the 401 handler below takes over */ }
+  }
+}
+
+api.interceptors.request.use(async (config) => {
   config.baseURL = getApiBase(); // resolved per-request so runtime changes apply
+  if (!String(config.url ?? "").startsWith("/auth/")) await ensureFreshToken();
   const token = tokenStore.access;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-let refreshing: Promise<string> | null = null;
+// Keep-warm while the app is open: a tiny ping every few minutes (and when you
+// come back to the tab) keeps the server and its database connection awake
+// and the login fresh, so the next save doesn't wait for a cold start.
+let lastWarm = 0;
+function warm() {
+  if (document.visibilityState !== "visible" || !tokenStore.access) return;
+  if (Date.now() - lastWarm < 30_000) return;
+  lastWarm = Date.now();
+  renewSoon();
+  ensureFreshToken().finally(() => {
+    fetch(`${getApiBase()}/health/warm`, { cache: "no-store" }).catch(() => {});
+  });
+}
+// Renew the login quietly a few minutes before it expires, so no click ever
+// waits for a token refresh.
+function renewSoon() {
+  const exp = tokenExpiresAt(tokenStore.access);
+  if (exp && tokenStore.refresh && exp - Date.now() < 3 * 60_000) refreshTokens().catch(() => {});
+}
+export function startKeepAlive(): () => void {
+  warm();
+  renewSoon();
+  const timer = window.setInterval(warm, 4 * 60_000);
+  const renewTimer = window.setInterval(renewSoon, 45_000);
+  document.addEventListener("visibilitychange", warm);
+  window.addEventListener("focus", warm);
+  window.addEventListener("online", warm);
+  return () => {
+    window.clearInterval(timer);
+    window.clearInterval(renewTimer);
+    document.removeEventListener("visibilitychange", warm);
+    window.removeEventListener("focus", warm);
+    window.removeEventListener("online", warm);
+  };
+}
 
 api.interceptors.response.use(
   (res) => res,
@@ -100,18 +175,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry && tokenStore.refresh) {
       original._retry = true;
       try {
-        if (!refreshing) {
-          refreshing = axios
-            .post(`${getApiBase()}/auth/refresh`, { refreshToken: tokenStore.refresh })
-            .then((r) => {
-              tokenStore.set(r.data.accessToken, r.data.refreshToken);
-              return r.data.accessToken as string;
-            })
-            .finally(() => {
-              refreshing = null;
-            });
-        }
-        const newToken = await refreshing;
+        const newToken = await refreshTokens();
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
