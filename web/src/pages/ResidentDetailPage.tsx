@@ -15,6 +15,7 @@ import { downloadFile, shareFile, canShareFiles } from "../lib/download";
 import { firstMonthPlan, periodLabel, formatPerDay, dueWindow, ordinal, MONTHS } from "../lib/rent";
 import { FirstMonthSummary, FirstPaymentHint } from "../components/FirstMonthSummary";
 import MoveResidentModal from "../components/MoveResidentModal";
+import EditResidentModal from "../components/EditResidentModal";
 
 const DOC_TYPES: [string, string][] = [
   ["CNIC_FRONT", "CNIC (Front)"], ["CNIC_BACK", "CNIC (Back)"], ["PASSPORT", "Passport photo"],
@@ -49,6 +50,7 @@ export default function ResidentDetailPage() {
   const [adjust, setAdjust] = useState<null | any>(null);
   const [prorateOpen, setProrateOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [prorateExcess, setProrateExcess] = useState("deposit");
   const [prorateHidden, setProrateHidden] = useState(false);
   const [adjForm, setAdjForm] = useState<any>({ amount: 0, note: "" });
@@ -308,6 +310,7 @@ export default function ResidentDetailPage() {
             <MoreMenu
               busy={!!exporting}
               items={[
+                can("residents.manage") ? { label: "✏️ Edit details", onClick: () => setEditOpen(true) } : null,
                 { label: "📄 Registration Form", onClick: () => exportForm("save"), disabled: !!exporting },
                 canShareFiles() ? { label: "📤 Share Form", onClick: () => exportForm("share"), disabled: !!exporting } : null,
                 { label: "📑 Full Profile PDF", onClick: () => exportProfile("save"), disabled: !!exporting },
@@ -358,10 +361,13 @@ export default function ResidentDetailPage() {
               <p className="font-semibold text-slate-900 truncate">{r.fullName}</p>
               <StatusBadge status={r.status} />
               {can("residents.manage") && (
-                <label className="block text-xs text-brand-600 font-medium mt-1 cursor-pointer">
-                  {uploading ? "Uploading…" : r.photoUrl ? "Change photo" : "Add photo"}
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadPhoto(e.target.files?.[0])} />
-                </label>
+                <div className="mt-1 flex items-center gap-3 text-xs font-medium">
+                  <button type="button" onClick={() => setEditOpen(true)} className="text-brand-600">Edit details</button>
+                  <label className="text-brand-600 cursor-pointer">
+                    {uploading ? "Uploading…" : r.photoUrl ? "Change photo" : "Add photo"}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadPhoto(e.target.files?.[0])} />
+                  </label>
+                </div>
               )}
             </div>
           </div>
@@ -406,7 +412,15 @@ export default function ResidentDetailPage() {
             {[
               ["Type", { STUDENT: "Student", PROFESSIONAL: "Professional", DAILY: "Daily guest" }[r.occupantType as string] ?? "Student"],
               ["Guardian", r.guardianName], ["Phone", r.phone], ["CNIC", r.cnic], ["City", r.city],
-              ...(r.occupantType === "STUDENT" ? [["University", r.university], ["Program", r.program]] : []),
+              ...([
+                ["WhatsApp", r.whatsapp],
+                ["Email", r.email],
+                ["Gender", r.gender ? titleCase(r.gender) : ""],
+                ["Date of birth", r.dateOfBirth ? formatDate(String(r.dateOfBirth).slice(0, 10)) : ""],
+                ["Permanent address", r.permanentAddress],
+                ["Current address", r.currentAddress],
+              ].filter((row) => row[1])),
+              ...(r.occupantType === "STUDENT" ? [["University", r.university], ["Program", r.program], ...(r.studentId ? [["Student ID", r.studentId]] : [])] : []),
               ...(r.occupantType === "PROFESSIONAL" ? [["Company", r.company], ["Occupation", r.occupation]] : []),
               // Extra self-intake details — shown only when the resident provided them.
               ...([
@@ -426,6 +440,7 @@ export default function ResidentDetailPage() {
                 ["Heard via", r.howHeard],
               ].filter((row) => row[1])),
               ["Food Plan", r.foodPlan?.name],
+              ...(r.contractMonths ? [["Contract", `${r.contractMonths} months`]] : []),
               ["Admission", formatDate(r.admissionDate)],
               ...(r.occupantType === "DAILY"
                 ? [["Guests", String(r.guests ?? 1)], ["Room rate / night", formatPKR(r.dailyRate)], ["Expected checkout", r.expectedCheckout ? formatDate(r.expectedCheckout) : "—"]]
@@ -848,6 +863,22 @@ export default function ResidentDetailPage() {
       </Modal>
 
       <MoveResidentModal residentId={id ?? null} open={moveOpen} onClose={() => setMoveOpen(false)} onMoved={refetch} />
+      <EditResidentModal
+        r={r}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={(u) => {
+          // Show the new details at once (scalar fields from the save), then refresh.
+          setData((prev: any) => {
+            if (!prev) return prev;
+            const next = { ...prev };
+            for (const k of Object.keys(u)) if (k in prev && (u[k] === null || typeof u[k] !== "object")) next[k] = u[k];
+            next.pendingReview = false;
+            return next;
+          });
+          refetch();
+        }}
+      />
 
       {/* Full-screen photo / document viewer */}
       {viewing && <FileViewer open={true} onClose={() => setViewing(null)} url={viewing.url} name={viewing.name} mime={viewing.mime} onDelete={viewing.onDelete} />}

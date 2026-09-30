@@ -8,6 +8,7 @@ import { requirePermission, assertHostelAccess } from "../middleware/rbac";
 import { hostelScope, dec, fileMimes } from "../lib/query";
 import { catchUpRent, generateDueRent, redateOpenCharges, rentCycle, proRata, proRataNote, firstChargeDueDate, residentDueDay, ymd, resetCharge, switchToCalendar } from "../lib/rent";
 import { audit } from "../lib/audit";
+import { invalidateAuth } from "../middleware/auth";
 
 const router = Router();
 
@@ -268,21 +269,115 @@ router.post(
   })
 );
 
-// PUT /api/residents/:id
+// Editable resident details. A cleared box ("") is stored as empty (null).
+// The hostel is not editable here — moving branches goes through the
+// transfer (it moves unpaid rent and the deposit with the resident). Rent,
+// deposit and dates that drive billing have their own dedicated actions.
+const text = (max = 500) => z.preprocess((v) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim()) : v), z.string().max(max).nullable().optional());
+const day = z.preprocess((v) => (v === "" ? null : v), z.coerce.date().nullable().optional());
+const residentUpdateSchema = z.object({
+  fullName: z.string().trim().min(1, "Name can't be empty").max(120).optional(),
+  guardianName: text(120),
+  dateOfBirth: day,
+  gender: z.preprocess((v) => (v === "" ? null : v), z.enum(["MALE", "FEMALE", "OTHER"]).nullable().optional()),
+  cnic: text(30),
+  phone: text(30),
+  whatsapp: text(30),
+  email: z.preprocess((v) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim().toLowerCase()) : v), z.string().email("Please enter a valid email address").nullable().optional()),
+  permanentAddress: text(),
+  currentAddress: text(),
+  city: text(80),
+  emergencyName: text(120),
+  emergencyPhone: text(30),
+  emergencyRelation: text(60),
+  guardianPhone: text(30),
+  guardianOccupation: text(120),
+  businessAddress: text(),
+  religion: text(60),
+  nationality: text(60),
+  bloodGroup: text(10),
+  vehicle: text(120),
+  localRefName: text(120),
+  localRefRelation: text(60),
+  localRefAddress: text(),
+  localRefPhone: text(30),
+  medicalNotes: text(1000),
+  howHeard: text(120),
+  expectedMoveIn: day,
+  expectedStayMonths: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(120).nullable().optional()),
+  occupantType: z.enum(["STUDENT", "PROFESSIONAL", "DAILY"]).optional(),
+  university: text(160),
+  program: text(160),
+  company: text(160),
+  occupation: text(160),
+  studentId: text(60),
+  contractMonths: z.preprocess((v) => (v === "" ? null : v), z.coerce.number().int().min(0).max(120).nullable().optional()),
+  foodPlanId: z.preprocess((v) => (v === "" ? null : v), z.string().nullable().optional()),
+  hostelId: z.any().refine((v) => v === undefined, "To move a resident to another hostel, use Change room / branch."),
+}).strict();
+
+// PUT /api/residents/:id — edit a resident's details. Only the fields sent are
+// changed; the audit log records exactly what changed (old → new).
 router.put(
   "/:id",
   requirePermission("residents.manage"),
-  validateBody(residentSchema.partial()),
+  validateBody(residentUpdateSchema),
   asyncHandler(async (req, res) => {
-    const before = await prisma.resident.findUnique({ where: { id: req.params.id } });
+    const before = await prisma.resident.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, email: true } } } });
     if (!before) throw notFound("Resident not found");
     await assertHostelAccess(req, before.hostelId);
-    const data = { ...req.body };
-    if (data.email === "") delete data.email;
+    const body = req.body as z.infer<typeof residentUpdateSchema>;
+
+    // Daily guests book whole rooms; a monthly resident in a bed can't become
+    // one (or vice versa) by an edit — that's a different kind of stay.
+    if (body.occupantType && body.occupantType !== before.occupantType && before.bedId
+        && (body.occupantType === "DAILY" || before.occupantType === "DAILY")) {
+      throw badRequest("A daily guest and a monthly resident are billed differently. Check them out and admit them again as the other type.");
+    }
+    if (body.foodPlanId) {
+      const plan = await prisma.foodPlan.findUnique({ where: { id: body.foodPlanId }, select: { id: true } });
+      if (!plan) throw badRequest("That food plan no longer exists.");
+    }
+
+    // Only real changes are written / logged.
+    const data: Record<string, unknown> = {};
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    const same = (a: unknown, b: unknown) => (a instanceof Date || b instanceof Date)
+      ? (a ? new Date(a as any).getTime() : null) === (b ? new Date(b as any).getTime() : null)
+      : (a ?? null) === (b ?? null);
+    for (const [key, value] of Object.entries(body)) {
+      if (value === undefined) continue;
+      const old = (before as Record<string, unknown>)[key];
+      if (!same(old, value)) { data[key] = value; changes[key] = { from: old ?? null, to: value }; }
+    }
+
+    // A resident with a portal login signs in with their email: keep the
+    // login's name and email in step (and refuse an email another user has).
+    const loginEmail = before.user && "email" in data && data.email ? String(data.email) : null;
+    if (before.user && "email" in data && !data.email) {
+      throw badRequest("This resident signs in to the portal with their email, so it can't be left empty.");
+    }
+    if (loginEmail && loginEmail !== before.user!.email) {
+      const clash = await prisma.user.findUnique({ where: { email: loginEmail }, select: { id: true } });
+      if (clash && clash.id !== before.user!.id) throw badRequest("Another account already uses this email address.");
+    }
+
     // Editing counts as reviewing a self-intake submission.
-    const resident = await prisma.resident.update({ where: { id: before.id }, data: { ...data, pendingReview: false } });
-    await audit({ userId: req.auth!.id, action: "resident.update", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId });
-    res.json(resident);
+    const resident = await prisma.$transaction(async (tx) => {
+      const updated = await tx.resident.update({ where: { id: before.id }, data: { ...data, pendingReview: false } });
+      if (before.user && ("fullName" in data || loginEmail)) {
+        await tx.user.update({
+          where: { id: before.user.id },
+          data: { ...("fullName" in data ? { name: String(data.fullName) } : {}), ...(loginEmail ? { email: loginEmail } : {}) },
+        });
+      }
+      return updated;
+    });
+    if (before.user) invalidateAuth(before.user.id);
+    if (Object.keys(changes).length) {
+      await audit({ userId: req.auth!.id, action: "resident.update", entity: "Resident", entityId: resident.id, hostelId: resident.hostelId, oldValue: Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v.from])), newValue: Object.fromEntries(Object.entries(changes).map(([k, v]) => [k, v.to])) });
+    }
+    res.json({ ...resident, monthlyRent: dec(resident.monthlyRent), dailyRate: dec(resident.dailyRate), changed: Object.keys(changes) });
   })
 );
 
