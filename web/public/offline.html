@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#325dff" />
+    <title>No connection</title>
+    <!-- Shown by the phone app (bundled inside the APK) when it can't reach
+         the live site — no internet, or the server is unreachable. It goes
+         back to the app as soon as the connection returns. -->
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px 16px; background: #f8fafc; color: #0f172a;
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .card {
+        width: 100%; max-width: 360px; padding: 28px 24px; text-align: center;
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+      }
+      img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 12px; }
+      h1 { margin: 0 0 6px; font-size: 20px; }
+      p { margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #64748b; }
+      button {
+        width: 100%; padding: 12px 16px; border: 0; border-radius: 10px;
+        background: #325dff; color: #fff; font: inherit; font-weight: 600; font-size: 15px;
+      }
+      button:disabled { opacity: 0.7; }
+      small { display: block; margin-top: 12px; font-size: 12px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="riwaq-logo.png" alt="" onerror="this.remove()" />
+      <h1>No internet connection</h1>
+      <p>The app needs the internet to show your hostel's latest data. Check your Wi-Fi or mobile data, then try again.</p>
+      <button id="retry" type="button">Try again</button>
+      <small id="status">We'll reconnect automatically when you're back online.</small>
+    </div>
+    <script>
+      (function () {
+      // Capacitor sets WEBVIEW_SERVER_URL to the live site the app opens.
+      var appUrl = (window.WEBVIEW_SERVER_URL || "").replace(/\/+$/, "");
+      var btn = document.getElementById("retry");
+      var statusEl = document.getElementById("status");
+      var busy = false;
+
+      // Only leave this page once the site answers, so a failed retry doesn't
+      // flash a blank screen.
+      function reachable() {
+        if (!appUrl) return Promise.resolve(true);
+        return fetch(appUrl + "/api/health/warm?ts=" + Date.now(), { mode: "no-cors", cache: "no-store" })
+          .then(function () { return true; }, function () { return false; });
+      }
+
+      function retry(manual) {
+        if (busy) return;
+        busy = true;
+        if (manual) { btn.disabled = true; btn.textContent = "Connecting…"; }
+        reachable().then(function (ok) {
+          if (ok) { location.replace(appUrl ? appUrl + "/" : "/"); return; }
+          busy = false;
+          if (!manual) return;
+          btn.disabled = false;
+          btn.textContent = "Try again";
+          statusEl.textContent = "Still can't reach the server. We'll keep trying.";
+        });
+      }
+
+      btn.addEventListener("click", function () { retry(true); });
+      window.addEventListener("online", function () { retry(false); });
+      // Some phones don't fire "online" reliably — check now and then.
+      setInterval(function () { retry(false); }, 10000);
+      })();
+    </script>
+  </body>
+</html>

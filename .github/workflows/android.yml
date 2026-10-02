@@ -42,8 +42,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # The action installs "tools platform-tools" by default, but the legacy
+      # "tools" package no longer exists in current SDK repos and makes
+      # sdkmanager fail — so name the packages explicitly.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
 
       - name: Install required Android SDK packages
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
@@ -54,8 +59,13 @@ jobs:
       - name: Build web app
         run: npm --workspace web run build
 
+      # The app opens the live site (see web/capacitor.config.ts), so every
+      # website update shows up in the installed app without a reinstall.
+      # Override with a repo variable APP_URL if the site moves.
       - name: Sync Capacitor Android project
         working-directory: web
+        env:
+          CAP_SERVER_URL: ${{ vars.APP_URL || 'https://app.riwaqhostels.com' }}
         run: npx cap sync android
 
       - name: Build debug APK
@@ -86,6 +96,8 @@ jobs:
 
             Download `app-debug.apk` below and install it on any Android phone
             (you may need to allow "install from unknown sources").
-            On first launch, enter your hostel server address, then log in.
-            This link always holds the newest version.
+            The app opens the live site, so website updates appear in the app
+            automatically — no need to reinstall for them.
+            If an older copy won't update ("App not installed"), uninstall it
+            first, then install this one.
           files: web/android/app/build/outputs/apk/debug/app-debug.apk

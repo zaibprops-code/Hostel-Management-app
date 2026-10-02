@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { api, apiError, isNativeApp, needsServerConfig, getApiBase, setApiBase, clearApiBase } from "../lib/api";
+import { api, apiError, isBundledApp, needsServerConfig, getApiBase, setApiBase, clearApiBase } from "../lib/api";
 import { Button, Input, ErrorText, Spinner } from "../components/ui";
 
 type View = "loading" | "server" | "onboarding" | "login";
@@ -171,7 +171,7 @@ export default function LoginPage() {
                 <button type="button" onClick={() => { setError(""); setView("login"); }} className="text-sm text-brand-600 hover:underline">
                   ← Already have an account? Sign in
                 </button>
-                {isNativeApp() && (
+                {isBundledApp() && (
                   <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600">⚙ Change server</button>
                 )}
               </div>
@@ -190,7 +190,7 @@ export default function LoginPage() {
                 <Button type="submit" loading={loading} className="w-full">Sign in</Button>
               </form>
               <div className="mt-3 flex items-center justify-between">
-                {isNativeApp() ? (
+                {isBundledApp() ? (
                   <button type="button" onClick={() => setView("server")} className="text-xs text-slate-400 hover:text-brand-600">⚙ Server settings</button>
                 ) : <span />}
                 <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline">Forgot password?</Link>

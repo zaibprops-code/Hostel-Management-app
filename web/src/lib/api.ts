@@ -77,9 +77,17 @@ export function clearApiBase(): void {
   localStorage.removeItem(API_BASE_KEY);
 }
 
-// The mobile app has no same-origin backend, so it needs an explicit address.
+// True for the phone app when it runs the copy of the screens bundled in the
+// APK (served from https://localhost). The CI build instead opens the live
+// site (see web/capacitor.config.ts), where the API is same-origin just like
+// on the website, so there's no server address to set.
+export function isBundledApp(): boolean {
+  return isNativeApp() && window.location.hostname === "localhost";
+}
+
+// The bundled mobile app has no same-origin backend, so it needs an explicit address.
 export function needsServerConfig(): boolean {
-  return isNativeApp() && !localStorage.getItem(API_BASE_KEY);
+  return isBundledApp() && !localStorage.getItem(API_BASE_KEY);
 }
 
 export const api = axios.create();
