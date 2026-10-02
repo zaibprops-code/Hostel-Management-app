@@ -32,9 +32,9 @@ The APK is built automatically by GitHub — you don't need Android Studio or a 
 1. Copy `app-debug.apk` to the Android phone (or open the Releases link on the phone).
 2. Tap the file. Android may warn about installing from an unknown source — allow it for
    your browser/files app.
-3. Open **XYZ Hostel** from the app drawer.
-4. On first launch, enter your **server address** (e.g. `hostel-api.onrender.com`) and tap
-   **Save & continue**, then log in.
+3. Open **Riwaq Hostels** from the app drawer.
+4. Log in. The app opens the live site (`app.riwaqhostels.com`), so website updates show up
+   in the app automatically — no reinstall needed for them.
 
 You can change the server later from the ⚙ **Server settings** link on the login screen.
 
@@ -80,7 +80,7 @@ additional configuration, not a rewrite.
 
 | | |
 |---|---|
-| App name | XYZ Hostel |
+| App name | Riwaq Hostels |
 | Package / App ID | `com.xyzhostel.hms` |
 | Min Android version | 5.1 (API 22) |
 | Target Android version | 14 (API 34) |

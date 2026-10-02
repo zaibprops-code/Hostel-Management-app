@@ -92,7 +92,7 @@ jobs:
           name: Latest Android APK
           prerelease: true
           body: |
-            📱 **Hostel Manager — Android app (latest build)**
+            📱 **Riwaq Hostels — Android app (latest build)**
 
             Download `app-debug.apk` below and install it on any Android phone
             (you may need to allow "install from unknown sources").

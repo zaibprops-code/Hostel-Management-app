@@ -14,7 +14,7 @@ const serverUrl = process.env.CAP_SERVER_URL?.trim().replace(/\/+$/, "");
 
 const config: CapacitorConfig = {
   appId: "com.xyzhostel.hms",
-  appName: "XYZ Hostel",
+  appName: "Riwaq Hostels",
   webDir: "dist",
   android: {
     // API is served over HTTPS, so cleartext (http) is not needed.
